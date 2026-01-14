@@ -1,0 +1,28 @@
+# ORCA outputs
+*.out
+*.gbw
+*.engrad
+*.tmp
+*.xyz
+*.hess
+*.prop
+*.traj
+*.int
+*.mos
+*.bak
+*.err
+*.inp
+*.slurm
+*.densities
+*.densitiesinfo
+*.cpcm
+*.cpcm_corr
+*.property.txt
+*.txt
+*.opt
+*.txt
+*.bibtex
+
+# General scratch files
+*.log
+*.chk
