@@ -22,7 +22,7 @@
 *.opt
 *.txt
 *.bibtex
-
+*.ipynb
 # General scratch files
 *.log
 *.chk
