@@ -3,7 +3,7 @@
 *.gbw
 *.engrad
 *.tmp
-*.xyz
+#*.xyz
 *.hess
 *.prop
 *.traj
