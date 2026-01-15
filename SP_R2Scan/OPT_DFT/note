@@ -1,4 +1,0 @@
-Taken optimized geometries from R2scan optimization and copied them here.
-I will then run a high level DFT calculation on them to check
-for agreement
---- DFT agrees with R2scan SP very well!
