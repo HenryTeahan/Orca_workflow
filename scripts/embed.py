@@ -131,12 +131,9 @@ for xyz in args.xyz_files:
 
     possible_coord_orders = get_possible_coord_permutations(smiles)
     stereo_confs = []
-    energies = []
     for coord_order in possible_coord_orders:
-        mol, min_E = get_tmc_mol(smiles, xtb_path, coord_order) # NOTE: We are now returning all mols and min_Es for R2scan SP
-        for m, En in zip(mol, min_E):
-            stereo_confs.append(m)
-            energies.append(En)
+        mol = get_tmc_mol(smiles, xtb_path, coord_order) # NOTE: We are now returning all mols and min_Es for R2scan SP
+        stereo_confs.append(mol)
     # Cleanup
     dir = Path(os.getcwd())
     tempnames = [
