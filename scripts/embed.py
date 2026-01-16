@@ -175,9 +175,12 @@ for xyz in args.xyz_files:
         #base.mkdir(input_files, exist_ok=True)
         xyz_files.mkdir(exist_ok=True)
         #min_E_index = np.argmin(energies)
-        
-        xyz = mkxyzblock(stereo_confs[i]) # Making original xyz-files
-        
+        print(stereo_confs[i])
+        print(stereo_confs)        
+        try:
+            xyz = mkxyzblock(stereo_confs[i]) # Making original xyz-files
+        except:
+            print("Error", stereo_confs)
         filename = f"{name}_embed_{i}.xyz"
         path_xyz = xyz_files / filename
         path_xyz.write_text(xyz)
