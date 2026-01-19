@@ -1,4 +1,6 @@
 # ORCA outputs
+*.smd*
+
 *.out
 *.gbw
 *.engrad
