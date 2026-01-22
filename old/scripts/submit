@@ -1,0 +1,93 @@
+#!/usr/bin/env python
+import argparse
+import os
+import textwrap
+from pathlib import Path
+parser = argparse.ArgumentParser()
+
+parser.add_argument("inp_files", nargs="+", help="The input file(s) for orca calculations")
+parser.add_argument("--cpus", help="Number of CPUs for calculation", type=int, default=8)
+parser.add_argument("--mem", help="Mb of memory available", type=int, default=12000)
+parser.add_argument("--partition", help="HPC partition to run calculations on", type=str, default="compchem")
+parser.add_argument("--skip_curate", help="Skip manual addition of cpus and memory - use input file as is", type=bool, default=False)
+
+
+
+def curate_inp(inp_file, cpus, mem):
+    """Takes input and adds cpu and mem parameters"""
+    mem_per_core = int(0.75*mem // cpus)
+    with open(inp_file, "r") as file:
+        text = file.read()
+        if "%pal" in text:
+            print(f"{inp_file} already has %pal; skip resoruce insertion")
+            
+
+
+
+            #raise ValueError(f"{inp_file} already has %pal; skipping")
+        if "%method" in text:
+            p1,p2=text.split("*",1)
+            if "%pal" in p1 or "%pal" in p2:
+                raise ValueError(f"Something is up with the input files... Please reformat them")
+            pmid = f"\n %pal \n   nprocs {cpus} \n end \n \n %maxcore {mem_per_core} \n \n %method"
+            out = p1+pmid+p2
+        else:
+            p1,p2 = text.split("*",1)
+            if "%pal" in p1 or "%pal" in p2:
+                return
+            pmid = f"\n %pal \n nprocs {cpus} \n end \n \n %maxcore {mem_per_core} \n \n *"
+            out = p1+pmid+p2
+    path = Path(inp_file)
+    path.write_text(out)
+
+
+def qsub_prep(inp_file, cpus, mem, partition):
+    """
+    Submission script for input files running with orca
+    Takes an inp_file - creates a folder; moves inp_file to that folder; runs orca
+    """
+    pwd = os.getcwd()
+    inp_stem = Path(inp_file).stem
+    slurm_filename = f"submit_{inp_stem}.slurm"
+    qsub_file="""#!/bin/sh
+#SBATCH --job-name={inp_file}
+#SBATCH --nodes=1
+#SBATCH --ntasks={cpus}
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu={mem}
+#SBATCH --error={pwd}/{inp_file}.err
+#SBATCH --output={pwd}/{inp_file}.out
+#SBATCH --time=18:00:00
+#SBATCH --partition={partition}
+#SBATCH --no-requeue
+module load mpi/openmpi-x86_64
+export OMP_NUM_THREADS={cpus}
+#Move to scratch dir for calculations
+cp {inp_file} /scratch/$SLURM_JOB_ID/
+cd /scratch/$SLURM_JOB_ID/
+#Run calculations
+/groups/kemi/hteahan/opt/orca_6_1_0_linux_x86-64_shared_openmpi418/orca {inp_file}
+
+mv * {pwd}
+    """.format(mem=mem, cpus=cpus, pwd=pwd, partition=partition, inp_file=inp_file)
+    
+    with open(slurm_filename, "w") as f:
+        f.write(textwrap.dedent(qsub_file))
+    return slurm_filename
+
+
+if __name__=="__main__":
+    args = parser.parse_args()
+    #inp_file = args.inp_file
+    cpus = args.cpus
+    mem = args.mem
+    partition = args.partition
+    #curate_inp(inp_file, cpus, mem)
+    #qsub_name = qsub_prep(inp_file, cpus, mem, partition)
+    for inp_file in args.inp_files:
+        if args.skip_curate == False:
+            curate_inp(inp_file, cpus, mem)
+        qsub_name = qsub_prep(inp_file, cpus, mem, partition)
+        #Run process
+        os.popen("sbatch {0}".format(qsub_name)).read()
+

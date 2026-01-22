@@ -11,9 +11,20 @@ from TMC_embed.xyz2mol.xyz2mol_local import *
 from TMC_embed.xyz2mol.xyz2mol_local_tmc import *
 from TMC_embed.utils import *
 from TMC_embed.tmc_embed import *
+from contextlib import contextmanager
+from extract_energies import extract_energy
 ### END
 
 ### Functions
+@contextmanager
+def pushd(new_dir: Path):
+    old_dir = Path.cwd()
+    os.chdir(new_dir)
+    try:
+        yield
+    finally:
+        os.chdir(old_dir)
+
 
 def mkxyzblock(xyzblock: str): 
     xyzblock = Chem.MolToXYZBlock(xyzblock)
@@ -28,173 +39,91 @@ def make_inp_file_xTB_opt(xyz: str):
     inp_file = xyz_str
     return inp_file
     
-def run_xTB(workdir, filename):
-    ''' Attempts running unconstrained xTB calculations '''
+def run_xTB(tmp_dir, xyz, ncpu):
+    ''' Runs xTB SP calcuation on output files from embedding, chooses the lowest energy embeddding '''
 
-    workdir = Path(workdir)
-    inp = Path(filename)
-
-
-    print(f"Running ORCA xTB Opt: {inp.name}")
-    print(f"Current directory: {os.getcwd()}")
-    print(f"Input file: {inp}")
+    print(f"Running orca xtb sp on: {xyz}")
     
-    xTB_opt = workdir / "OUTPUT"
-    xTB_opt = Path(xTB_opt)
-    xTB_opt.mkdir(exist_ok=True)
-
-    out = inp.with_suffix(".out").name
+    out = tmp_dir / Path(xyz).with_suffix(".out").name
+    
     print(out)
     try:
         with open(out, "w") as f: #TODO: Make this in a try-except loop. xTB can & will error silently - not producing xtbopt.xyz
             subprocess.run(
-                [xtb_path, str(inp), "--ohess", "verytight", "--parallel", "4", "--gfn2"],
+                [xtb_path, str(xyz), "--SP", "--parallel", str(ncpu), "--gfn2"],
                 stdout= f,
                 stderr= subprocess.STDOUT,
                 check= True,
-                cwd = workdir
+                cwd = tmp_dir
             )
     except subprocess.CalledProcessError as e:
-        print(f"xTB failed for {inp.name}")
+        print(f"xtb failed for {xyz}")
 
+    # NOTE: Need to rewrite below to only return energy and move files around dependent on this...!
 
-    opt_file = workdir / f"xtbopt.xyz"
-    log_file = workdir / f"xtbopt.log"
-    out_file = workdir / out
-    if opt_file.exists() and log_file.exists() and out_file.exists():
-        new_path = xTB_opt / f"opt-{inp.stem}.xyz"
-        opt_file.rename(new_path)
-        trj_path = xTB_opt / f"opt-{inp.stem}.log"
-        log_file.rename(trj_path)
-        out_path = xTB_opt / out
-        out_file.rename(out_path)
-    else:
-        print("COULDNT FIND OPTIMIZED FILE OR LOG FILE")
-
-    tempnames = [
-        "xtbopt.log",
-        "xtbopt.xyz",
-        "xtbrestart",
-        "xtbtopo.mol",
-        "xtbopt",
-        "constrain.inp",
-        "constrain2.inp",
-        "charges",
-        "out.out",
-        "wbo",
-        "sep_embed_final.xyz",
-        ".xtboptok",
-        "hessian",
-        "g98.out",
-        "vibspectrum"
-    ]
-
-    for name in tempnames:
-        try:
-            os.remove(workdir / name)
-        except FileNotFoundError:
-            pass
-        try:
-            os.remove(xTB_opt / name)
-        except FileNotFoundError:
-            pass
-
-def get_energies(workdir):
-    subprocess.run(["/home/henryteahan/bin/get_energies"],
-                    check=True,
-                    cwd=workdir) #TODO: incorporate this script in python            
-### END
-
-
+    if (tmp_dir / out).exists():
+        shutil.copy(out, Path.cwd() / out.name)
+        return out
 
 parser = argparse.ArgumentParser()
-
+print("Starting parsing")
 parser.add_argument("--xtb_path", default="/home/henryteahan/opt/xtb-6.7.0/xtb-dist/bin/xtb", type=str, help="Full path to xTB binaries")
 parser.add_argument("--charge", default=0, type=int, help="Central metal ion charge in complex")
 parser.add_argument("xyz_files", nargs="+", help="input XYZ files - one or more")
-parser.add_argument("--unconstr", default="False", help="Attempt to run unconstrained optimization. May break desired geometries.")
+parser.add_argument("--ncpu", default=4, help="Number of OpenMP processes (cpus)")
 args = parser.parse_args()
 
 xtb_path = args.xtb_path
 
-print("Input arguments", args)
+print(f"Input arguments {args} \n \n \n ------------------ \n")
 for xyz in args.xyz_files:
     path = Path(xyz)
     print(f"Embedding {path.name}")
 
-    smiles = extract_TMC_smiles(os.path.join(os.getcwd(), str(path)), charge = 0)
+    # The xyz file must be in the working directory.
+    if not (Path.cwd() / path.name).exists():
+        shutil.copy(path, Path.cwd() / path.name)
+
+    # Move into tmp directory and run calculations.
+    tmp_dir = Path.cwd() / "tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(path, tmp_dir)
+    # Use TMC_embed tools and extract smiles and embed molecules.
+    xyz = tmp_dir /  path.name
+    
+    # Extract the transition metal files from the .xyz file.
+    # TODO: Add the option to not use .xyz files and rather use smiles.
+    with pushd(tmp_dir):
+        smiles = extract_TMC_smiles(str(xyz), charge = 0)
     target = f"Ni"
     print(smiles[smiles.find(target)-10:smiles.find(target)+10])
     pattern = r"(Ni)@.*?(:)"
     smiles = re.sub(pattern, r"\1+2\2", smiles)
     print(smiles[smiles.find(target)-10:smiles.find(target)+10])
 
-    possible_coord_orders = get_possible_coord_permutations(smiles)
-    stereo_confs = []
-    for coord_order in possible_coord_orders:
-        mol = get_tmc_mol(smiles, xtb_path, coord_order) # NOTE: We are now returning all mols and min_Es for R2scan SP
-        stereo_confs.append(mol)
-    # Cleanup
-    dir = Path(os.getcwd())
-    tempnames = [
-        "xtbopt.log",
-        "xtbopt.xyz",
-        "xtbrestart",
-        "xtbtopo.mol",
-        "xtbopt",
-        "constrain.inp",
-        "constrain2.inp",
-        "charges",
-        "out.out",
-        "wbo",
-        "sep_embed_final.xyz",
-        ".xtboptok"
-    ]
-
-    for name in tempnames:
-        try:
-            os.remove(dir / name)
-        except FileNotFoundError:
-            pass
-
-
-
-
-
-    # Making folder for the input files!
-
+    with pushd(tmp_dir):
+        possible_coord_orders = get_possible_coord_permutations(smiles)
+        stereo_confs = []
+        for coord_order in possible_coord_orders:
+            mol = get_tmc_mol(smiles, xtb_path, coord_order, N_tries=1)
+            stereo_confs.append(mol)
+     
     name = f"{path.stem}"
-
-    # TODO: Fix the embedding workflow and the handling of input and output files.
-    
-    base = Path("INPUT")
-    base.mkdir(parents=True, exist_ok=True)  
     for i in range(len(stereo_confs)):
-        #input_files = base / "INP_files"
-        xyz_files = base / "XYZ_files"
-        #base.mkdir(input_files, exist_ok=True)
-        xyz_files.mkdir(exist_ok=True)
-        #min_E_index = np.argmin(energies)
-        print(stereo_confs[i])
-        print(stereo_confs)        
         try:
-            xyz = mkxyzblock(stereo_confs[i]) # Making original xyz-files
+            xyz_data = mkxyzblock(stereo_confs[i]) # Making original xyz-files
         except:
             print("Error", stereo_confs)
         filename = f"{name}_embed_{i}.xyz"
-        path_xyz = xyz_files / filename
-        path_xyz.write_text(xyz)
+        out_path = Path.cwd() / filename
+        out_path.write_text(xyz_data)
     
-    #inp = make_inp_file_xTB_opt(xyz)
-    #
-    #filename = f"{name}.inp"
-    #path_inp = input_files / filename
-    #path_inp.write_text(inp)
-
-    if args.unconstr == "True":
-        # Make output directory
-        output = Path("OUTPUT")
-        output.mkdir(exist_ok=True)
-        run_xTB(os.getcwd(), path_xyz) ### RUNS FROM THE EXECUTED FOLDER LOCATION
-        get_energies(base)
-
+    
+        # RUN xTB SP 
+        out = run_xTB(tmp_dir, out_path, ncpu=args.ncpu) ### RUNS FROM THE EXECUTED FOLDER LOCATION
+        # Get xTB SP energy and return the best geometry in the working directory
+        df = extract_energy(out)    
+        print(df)
+    # TODO: Make energy handling here -> run PRISM Pruner and keep unique confs within 3 kcal/mol of each other -> Use these in the next process (R2Scan)
+# Clean up tmp folder
+shutil.rmtree(tmp_dir)

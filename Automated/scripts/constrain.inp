@@ -1,0 +1,13 @@
+
+    $constrain
+        force constant=0.0025
+        
+    distance: 13, 12, 1.805
+    distance: 30, 12, 1.8524999999999998
+    distance: 11, 12, 1.8524999999999998
+    distance: 23, 12, 1.8524999999999998
+    angle: 11, 12, 23, 180
+    angle: 30, 12, 11, 90
+    angle: 30, 12, 13, 180
+    $end
+    
