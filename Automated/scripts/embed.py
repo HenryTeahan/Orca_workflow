@@ -12,11 +12,11 @@ from TMC_embed.xyz2mol.xyz2mol_local_tmc import *
 from TMC_embed.utils import *
 from TMC_embed.tmc_embed import *
 from contextlib import contextmanager
-from extract_energies import extract_energy
+#from extract_energies import extract_energy
 from prism_pruner.conformer_ensemble import ConformerEnsemble
 from prism_pruner.pruner import prune
 from pebble import ProcessExpired, ProcessPool
-
+import numpy as np
 ### END
 
 ### Functions
@@ -29,7 +29,7 @@ def pushd(new_dir: Path):
     finally:
         os.chdir(old_dir)
 EH_TO_KCAL = 627.5096080305927
-### Parallel Processing
+### Parallel Processing TODO: Implement this on the loop
 def process_parallel(function, arguments, num_workers=6, timeout=30):
     res = []
     with ProcessPool(max_workers=num_workers) as pool:
@@ -167,7 +167,7 @@ def make_inp_file_xTB_opt(xyz: str):
     inp_file = xyz_str
     return inp_file
     
-def run_xTB(tmp_dir, xyz, ncpu):
+def run_xTB(tmp_dir, xyz, ncpu, xtb_path):
     ''' Runs xTB SP calcuation on output files from embedding, chooses the lowest energy embeddding '''
 
     print(f"Running orca xtb sp on: {xyz}")
@@ -232,28 +232,30 @@ if args.xyz_files != None:
         smiles = re.sub(pattern, r"\1+2\2", smiles)
         print(smiles[smiles.find(target)-10:smiles.find(target)+10])
         with pushd(tmp_dir):
-            possible_coord_orders = get_possible_coord_permutations(smiles)
+            possible_coord_orders = get_possible_coord_permutations(smile)
             stereo_confs = []
+            energies = []
             for coord_order in possible_coord_orders:
-                mol = get_tmc_mol(smiles, xtb_path, coord_order, N_tries=1)
-                stereo_confs.append(mol)
+                mol, es = get_tmc_mol(smile, xtb_path, coord_order, N_tries=args.N_tries, cpus = args.ncpu)
+                stereo_confs.extend(mol)
+                energies.extend(es)
         
         name = f"{path.stem}"
         for i in range(len(stereo_confs)):
             try:
-                xyz_data = mkxyzblock(stereo_confs[i]) # Making original xyz-files
+                xyz_data = mkxyzblock(stereo_confs[i], str(energies[i])) # Making original xyz-files
             except:
                 print("Error", stereo_confs)
             filename = f"{name}_embed_{i}.xyz"
             out_path = Path.cwd() / filename
             out_path.write_text(xyz_data)
         
-        
+            # TODO: Update xyz file handling in this 
             # RUN xTB SP 
-            out = run_xTB(tmp_dir, out_path, ncpu=args.ncpu) ### RUNS FROM THE EXECUTED FOLDER LOCATION
+            #out = run_xTB(tmp_dir, out_path, ncpu=args.ncpu) ### RUNS FROM THE EXECUTED FOLDER LOCATION
             # Get xTB SP energy and return the best geometry in the working directory
-            df = extract_energy(out)    
-            print(df)       
+            #df = extract_energy(out)    
+            #print(df)       
 elif args.smiles != None:
     smiles = pd.read_csv(args.smiles)
     smiles = smiles[args.smiles_col]
@@ -262,7 +264,7 @@ elif args.smiles != None:
     tmp_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(path, tmp_dir)
     smile_index = 0
-    for smile in smiles: #TODO: Make this into nested parallel loop.
+    for row, smile in enumerate(smiles): #TODO: Make this into nested parallel loop.
         with pushd(tmp_dir):
             possible_coord_orders = get_possible_coord_permutations(smile)
             stereo_confs = []
@@ -283,7 +285,7 @@ elif args.smiles != None:
         all_xyz_confs = "\n".join(line for line in all_xyz_confs.splitlines() if line.strip())
         
         with pushd(tmp_dir):
-            filename = f"{name}_embed_{i}.xyz"
+            filename = f"{name}_embed_{row}.xyz"
             out_path = Path.cwd() / filename
             out_path.write_text(all_xyz_confs)
         #TODO: rewrite to not have to write and then reread. 
