@@ -37,7 +37,7 @@ def split_xyzs(filename):
 
             atoms = lines[start:end]
 
-            outname = f"struct_{structure_idx}.xyz"
+            outname = f"{filename}struct_{structure_idx}.xyz"
             name_list.append(outname)
             with open(outname, "w") as out:
                 out.write(f"{natoms}\n")
@@ -98,7 +98,7 @@ def main():
         if file[-5:] == ".xyzs":
           name_list = split_xyzs(file)
           for n in name_list:
-            xyz_to_inp(n)
+            xyz_to_inp(n, args)
             Path(n).unlink()
 
 
