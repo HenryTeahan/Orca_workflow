@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import subprocess
 import argparse
 import os
 import textwrap
@@ -35,6 +36,7 @@ parser.add_argument("--partition", help="HPC partition to run calculations on", 
 ##SBATCH --partition={partition}
 ##SBATCH --no-requeue
 ##micromamba activate Complex
+
 ##Move to scratch dir for calculations
 #cp {xyz_file} /scratch/$SLURM_JOB_ID/
 #ln -s /lustre/hpc/kemi/hteahan/Orca_workflow/Automated/scripts/TMC_embed /scratch/$SLURM_JOB_ID/TMC_embed
@@ -61,13 +63,14 @@ def qsub_prep(smiles, smiles_col, xyz_file, N_tries, cpus, mem, partition):
     """
     pwd = os.getcwd()
     name_task = smiles if smiles != None else xyz_file
+    print(name_task, "name_task")
     name_stem = Path(name_task).stem
     slurm_filename = f"submit_{name_stem}.slurm"
     qsub_file="""#!/bin/sh
 #SBATCH --job-name={name_stem}
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=1
-#SBATCH --ntasks={cpus}
+#SBATCH --cpus-per-task={cpus}
+#SBATCH --ntasks=1
 #SBATCH --mem={mem}
 #SBATCH --error={pwd}/{name_stem}.err
 #SBATCH --output={pwd}/{name_stem}.out
@@ -81,13 +84,14 @@ ln -s /lustre/hpc/kemi/hteahan/Orca_workflow/Automated/scripts/TMC_embed /scratc
 cp /lustre/hpc/kemi/hteahan/Orca_workflow/Automated/scripts/embed.py /scratch/$SLURM_JOB_ID/
 ln -s /lustre/hpc/kemi/hteahan/opt/xtb-6.7.1/xtb-dist/bin/xtb /scratch/$SLURM_JOB_ID/xtb
 cd /scratch/$SLURM_JOB_ID/
+export PYTHONPATH=/scratch/$SLURM_JOB_ID:$PYTHONPATH
 
 
 #Run calculations
 micromamba run -n Complex python embed.py --xyz_files {xyz_file} --smiles {smiles} --smiles_col {smiles_col} --N_tries {N_tries} --xtb_path /scratch/$SLURM_JOB_ID/xtb
-cp *.xyz {pwd}
-cp *.xyzs {pwd}
-    """.format(mem=mem, cpus=cpus, pwd=pwd, partition=partition, smiles=smiles, smiles_col=smiles_col, N_tries=N_tries, xyz_file=xyz_file)
+cp * {pwd}
+cp * {pwd}
+    """.format(name_stem=name_stem, mem=mem, cpus=cpus, pwd=pwd, partition=partition, smiles=smiles, smiles_col=smiles_col, N_tries=N_tries, xyz_file=xyz_file)
     
     with open(slurm_filename, "w") as f:
         f.write(textwrap.dedent(qsub_file))
@@ -104,8 +108,9 @@ if __name__=="__main__":
     cpus = args.ncpu
     mem = args.mem
     partition = args.partition
-
-    if xyz_files != None:
+    print(xyz_files)
+    if xyz_files and not (len(xyz_files) == 1 and xyz_files[0] in (None, "None")):
+        print("ERROR WITH XYZ FILE")
         for inp_file in xyz_files:
             qsub_name = qsub_prep(smiles=smiles, smiles_col=smiles_col, xyz_file=inp_file, cpus=cpus, N_tries=N_tries, mem=mem, partition=partition)
             #Run process
