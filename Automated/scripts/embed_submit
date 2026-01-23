@@ -5,43 +5,89 @@ import textwrap
 from pathlib import Path
 parser = argparse.ArgumentParser()
 
-parser.add_argument("xyz_files", nargs="+", help="The xyz file(s) for embedding")
-parser.add_argument("--cpus", help="Number of CPUs for calculation", type=int, default=8)
+parser.add_argument("--smiles", default=None, type=str, help="Path to csv file containing smiles of complexes for calculation")
+parser.add_argument("--smiles_col", default = "Complex", type=str, help="Column name containing the smiles of complexes for calculation")
+parser.add_argument("--xtb_path", default="/home/henryteahan/opt/xtb-6.7.0/xtb-dist/bin/xtb", type=str, help="Full path to xTB binaries")
+parser.add_argument("--charge", default=0, type=int, help="Central metal ion charge in complex")
+parser.add_argument("--xyz_files", nargs="+", default=None, help="input XYZ files - one or more")
+parser.add_argument("--ncpu", default=4, help="Number of processes")
+parser.add_argument("--N_tries", type=int, default = 20, help = "Number of embedding attempts")
 parser.add_argument("--mem", help="Mb of memory available", type=int, default=16000)
 parser.add_argument("--partition", help="HPC partition to run calculations on", type=str, default="kemi1")
 
-def qsub_prep(xyz_file, cpus, mem, partition):
+#def qsub_prep_xyz(xyz_file, N_tries, cpus, mem, partition):
+#    """
+#    Submission script for xyz file embedding
+#    Takes an xyz file - generates N conformers; outputs lowest energy conformer.
+#    """
+#    pwd = os.getcwd()
+#    xyz_stem = Path(xyz_file).stem
+#    slurm_filename = f"submit_{xyz_stem}.slurm"
+#    qsub_file="""#!/bin/sh
+##SBATCH --job-name={xyz_file}
+##SBATCH --nodes=1
+##SBATCH --cpus-per-task=1
+##SBATCH --ntasks={ncpu}
+##SBATCH --mem={mem}
+##SBATCH --error={pwd}/{xyz_file}.err
+##SBATCH --output={pwd}/{xyz_file}.out
+##SBATCH --time=08:00:00
+##SBATCH --partition={partition}
+##SBATCH --no-requeue
+##micromamba activate Complex
+##Move to scratch dir for calculations
+#cp {xyz_file} /scratch/$SLURM_JOB_ID/
+#ln -s /lustre/hpc/kemi/hteahan/Orca_workflow/Automated/scripts/TMC_embed /scratch/$SLURM_JOB_ID/TMC_embed
+#cp /lustre/hpc/kemi/hteahan/Orca_workflow/Automated/scripts/embed.py /scratch/$SLURM_JOB_ID/
+#ln -s /lustre/hpc/kemi/hteahan/opt/xtb-6.7.1/xtb-dist/bin/xtb /scratch/$SLURM_JOB_ID/xtb
+#cd /scratch/$SLURM_JOB_ID/
+#
+#
+##Run calculations
+#micromamba run -n Complex python embed.py --xyz_files {xyz_file} --N_tries --xtb_path /scratch/$SLURM_JOB_ID/xtb
+#cp -r INPUT {pwd}
+#    """.format(mem=mem, cpus=cpus, pwd=pwd, partition=partition, xyz_file=xyz_file, N_tries=N_tries)
+#    
+#    with open(slurm_filename, "w") as f:
+#        f.write(textwrap.dedent(qsub_file))
+#    return slurm_filename
+
+
+
+def qsub_prep(smiles, smiles_col, xyz_file, N_tries, cpus, mem, partition):
     """
     Submission script for xyz file embedding
     Takes an xyz file - generates N conformers; outputs lowest energy conformer.
     """
     pwd = os.getcwd()
-    xyz_stem = Path(xyz_file).stem
-    slurm_filename = f"submit_{xyz_stem}.slurm"
+    name_task = smiles if smiles != None else xyz_file
+    name_stem = Path(name_task).stem
+    slurm_filename = f"submit_{name_stem}.slurm"
     qsub_file="""#!/bin/sh
-#SBATCH --job-name={xyz_file}
+#SBATCH --job-name={name_stem}
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks={cpus}
 #SBATCH --mem={mem}
-#SBATCH --error={pwd}/{xyz_file}.err
-#SBATCH --output={pwd}/{xyz_file}.out
+#SBATCH --error={pwd}/{name_stem}.err
+#SBATCH --output={pwd}/{name_stem}.out
 #SBATCH --time=08:00:00
 #SBATCH --partition={partition}
 #SBATCH --no-requeue
 #micromamba activate Complex
 #Move to scratch dir for calculations
-cp {xyz_file} /scratch/$SLURM_JOB_ID/
-ln -s /lustre/hpc/kemi/hteahan/Orca_workflow/scripts/TMC_embed /scratch/$SLURM_JOB_ID/TMC_embed
-cp /lustre/hpc/kemi/hteahan/Orca_workflow/scripts/embed.py /scratch/$SLURM_JOB_ID/
+cp {smiles} /scratch/$SLURM_JOB_ID/
+ln -s /lustre/hpc/kemi/hteahan/Orca_workflow/Automated/scripts/TMC_embed /scratch/$SLURM_JOB_ID/TMC_embed
+cp /lustre/hpc/kemi/hteahan/Orca_workflow/Automated/scripts/embed.py /scratch/$SLURM_JOB_ID/
 ln -s /lustre/hpc/kemi/hteahan/opt/xtb-6.7.1/xtb-dist/bin/xtb /scratch/$SLURM_JOB_ID/xtb
 cd /scratch/$SLURM_JOB_ID/
 
 
 #Run calculations
-micromamba run -n Complex python embed.py {xyz_file} --xtb_path /scratch/$SLURM_JOB_ID/xtb
-cp -r INPUT {pwd}
-    """.format(mem=mem, cpus=cpus, pwd=pwd, partition=partition, xyz_file=xyz_file)
+micromamba run -n Complex python embed.py --xyz_files {xyz_file} --smiles {smiles} --smiles_col {smiles_col} --N_tries {N_tries} --xtb_path /scratch/$SLURM_JOB_ID/xtb
+cp *.xyz {pwd}
+cp *.xyzs {pwd}
+    """.format(mem=mem, cpus=cpus, pwd=pwd, partition=partition, smiles=smiles, smiles_col=smiles_col, N_tries=N_tries, xyz_file=xyz_file)
     
     with open(slurm_filename, "w") as f:
         f.write(textwrap.dedent(qsub_file))
@@ -50,14 +96,20 @@ cp -r INPUT {pwd}
 
 if __name__=="__main__":
     args = parser.parse_args()
-    #inp_file = args.inp_file
-    cpus = args.cpus
+    xyz_files = args.xyz_files
+    smiles = args.smiles
+    smiles_col = args.smiles_col
+    N_tries = args.N_tries
+    
+    cpus = args.ncpu
     mem = args.mem
     partition = args.partition
-    #curate_inp(inp_file, cpus, mem)
-    #qsub_name = qsub_prep(inp_file, cpus, mem, partition)
-    for inp_file in args.xyz_files:
-        qsub_name = qsub_prep(inp_file, cpus, mem, partition)
-        #Run process
-        os.popen("sbatch {0}".format(qsub_name)).read()
 
+    if xyz_files != None:
+        for inp_file in xyz_files:
+            qsub_name = qsub_prep(smiles=smiles, smiles_col=smiles_col, xyz_file=inp_file, cpus=cpus, N_tries=N_tries, mem=mem, partition=partition)
+            #Run process
+            subprocess.run(["sbatch", qsub_name], check=True)
+    else:
+        qsub_name = qsub_prep(smiles=smiles, smiles_col=smiles_col, xyz_file=xyz_files, cpus=cpus, N_tries=N_tries, mem=mem, partition=partition)
+        subprocess.run(["sbatch", qsub_name], check=True)       

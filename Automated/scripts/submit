@@ -77,6 +77,8 @@ if __name__=="__main__":
     partition = args.partition
     #curate_inp(inp_file, cpus, mem)
     #qsub_name = qsub_prep(inp_file, cpus, mem, partition)
+
+    #TODO: Add check here that makes sure to feed it xyz files one at a time -> then extract the energies 
     for inp_file in args.inp_files:
         curate_inp(inp_file, cpus, mem)
         qsub_name = qsub_prep(inp_file, cpus, mem, partition)
