@@ -85,126 +85,142 @@ def remove_duplicate_mols(ligands, ligand_highlight):
 
 def rejoin_mols(ligands, right_side):
     """
-    Joins the ligand and the right side of the molecule
+    Joins the ligand and the right side of the molecule.
+    Preserves ligand order during failure.
     """
+    mols = []
+    smiles = []
 
-    output = []
-    seen = set()
     right_side = Chem.MolFromSmiles(right_side)
 
     for ligand in ligands:
-        # print(Chem.MolToSmiles(ligand))
-        Chem.Kekulize(ligand, clearAromaticFlags=True)
-        comb = Chem.CombineMols(right_side, ligand)
-        edcombo = Chem.EditableMol(comb)
-        b_idx = []
-        m_idx = -1
+        try:
+            # Default failure
+            mols.append(-1)
+            smiles.append(-1)
 
-        for atom in comb.GetAtoms():
-            if atom.GetAtomicNum() == 28: ### Assumes use of Ni metal 
-                m_idx = atom.GetIdx()
+            # Combine ligand and isomer
+            comb = Chem.CombineMols(right_side, ligand)
+            edcombo = Chem.EditableMol(comb)
+            b_idx = []
+            m_idx = -1
+
+            for atom in comb.GetAtoms():
+                if atom.GetAtomicNum() == 28: #TODO: Assumes use of Ni metal 
+                    m_idx = atom.GetIdx()
+                    continue # Skip central metal ion
+
+                if atom.HasProp("binding_site"):
+                    b_idx.append(atom.GetIdx()) # Append if binding site
+
+            if m_idx == -1 or not b_idx:
                 continue
-            try:   
-                atom.GetProp("binding_site")
-                b_idx.append(atom.GetIdx())
-            except:
-                continue
-
-        if m_idx == -1:
-            print("Couldn't find central metal")
-            break
-
-        for val in b_idx:
-            try:
+    
+            for val in b_idx:
                 edcombo.AddBond(m_idx, val, order=Chem.BondType.SINGLE)
-            except:
-                continue
-
-        f = edcombo.GetMol()
-        s = Chem.MolToSmiles(f, canonical=True)
-
-        if s in seen:
+            
+            f = edcombo.GetMol()
+            s = Chem.MolToSmiles(f, canonical=True)
+            
+            smiles[-1] = s
+            mols[-1] = f
+        except:
             continue
-        else:
-            seen.add(s)
-            output.append(f)
-    return output, list(seen)
+    return mols, smiles
 
 if __name__ == "__main__":
-# BEGIN
+    # BEGIN INPUT PARSING
     parser = argparse.ArgumentParser()
     parser.add_argument("INPUT", type=str, help="INPUT SMILES CSV FILE")
     parser.add_argument("--smiles_column", type=str, default = "smiles_huckel_DFT_xyz")
-    parser.add_argument("--right_side", type="+", help="Right hand side of the molecule - amino acid and metal ion (Input string)", default = "O=C1O[Ni]N(C1C1=CC=CC=C1)C1=CC=CC=C1") # TODO: Make this accept a csv of right hand side structures.
+    parser.add_argument("--isomer_pair", nargs="+", help="Right hand side of the molecule - isomer pairs and metal ion (Input string)",
+                        default = ["O=C1O[Ni]N(C1C1=CC=CC=C1)C1=CC=CC=C1","O=C1O[Ni]C(N1C1=CC=CC=C1)C1=CC=CC=C1"])
+    # By default, uses isomer1 and isomer2
     args = parser.parse_args()
-### END
+    ### END
     
+    # READ INPUT SMILES:
     combined_frame = pd.read_csv(args.INPUT)
-
-    sms = combined_frame[args.smiles_column].to_list()
+    sms = combined_frame[args.smiles_column].to_list() #We use the DFT_xyz smiles
     mols = [Chem.MolFromSmiles(s) for s in sms]
     print(f"Parsed {len(mols)} molecules")
-
+    # END
+    
+    # LOAD MetalDisconnectorOptions - Set TRANSITION_METALS_NUM
     params = rdMolStandardize.MetalDisconnectorOptions()
     params.splitAromaticC = True
     params.splitGrignards = True
     params.adjustCharges = False
-# Load MetalDisconnector
+    # Load MetalDisconnector
     mdis = rdMolStandardize.MetalDisconnector(params)
-
     TRANSITION_METALS_NUM = [21,22,23,24,25,26,27,57,28,29,30,39,40,41,42,43,44,45,46,47,48,71,72,73,74,75,76,77,78,79,80]
-    
-# Extract bidentate ligands
+    # END
+
+    # Extract bidentate ligands
     ligands = []
     mol_id = []
     for i, mol in enumerate(mols):
         frag = identify_bidentate(mol, TRANSITION_METALS_NUM, mdis)
-        if frag != -1:
-            ligands.append(frag)
-            mol_id.append(i)
-
+        if frag != -1: # identify_bidentate returns -1 if it cannot find a bidentate ligand or if it errors.
+            if isinstance(frag,list):
+                for f in frag:
+                    f.SetIntProp("ID", i)
+                    ligands.append(f)
+                    mol_id.append(i)
+            else:
+                frag.SetIntProp("ID", i) # Ligand identifier
+                ligands.append(frag)
+                mol_id.append(i)
     print("Found this many bidentate ligands!!", len(ligands))
+    # END
     
+    # Parse extracted bidentate ligands
     ligand_highlight = []
     ligands_flattened = []
 
     for n, mol in enumerate(ligands):
-        if isinstance(mol, list):
-            for m in mol:
-                highlight_atoms = highlight_bindsite(m)
-                ligand_highlight.append(highlight_atoms)
-                ligands_flattened.append(m)
-        else:
-            highlight_atoms = highlight_bindsite(mol)
-            ligand_highlight.append(highlight_atoms)
-            ligands_flattened.append(mol)
-    ligands = ligands_flattened
-
-    ligands, bindsites = remove_duplicate_mols(ligands, ligand_highlight)
-
+        #if isinstance(mol, list): # Capture cases where complex has >1 bidentate ligands
+        #    for m in mol:
+        #        highlight_atoms = highlight_bindsite(m) # Extracts binding site set by identify_bidentate
+        #        ligand_highlight.append(highlight_atoms)
+        #        ligands_flattened.append(m)
+        #else:
+        highlight_atoms = highlight_bindsite(mol)
+        ligand_highlight.append(highlight_atoms)
+        ligands_flattened.append(mol)
+    # END
+    
+    # Remove duplicate ligands
+    ligands, bindsites = remove_duplicate_mols(ligands_flattened, ligand_highlight)
     print("Number of unique mols", len(ligands))
-    #Chem.Draw.MolsToGridImage(unique_mols, highlightAtomLists=bindsites, molsPerRow=5, subImgSize=(500,500), maxMols=50)
-    
-    # TODO: Make below into a loop, where I repeat across multiple right hand sides, and then in the output file have various columns but indexing the same ligand.
-    #
-    new_mols, new_smiles = rejoin_mols(ligands, args.right_side)
+    # END
 
-    smiles = []
-    
-    for s in new_smiles:
-        try:
-            m = Chem.AddHs(Chem.MolFromSmiles(s))
-        except:
-            continue
-        for i, a in enumerate(m.GetAtoms()):
-            a.SetAtomMapNum(i+1)
-        s = Chem.MolToSmiles(m)
-        target = f"Ni" #TODO: ADD multiple metal recognition here dependent on the right side of the complex
-        pattern = r"(Ni)@.*?(:)"
-        s = re.sub(pattern, r"\1+2\2", s)
-        smiles.append(s)
-    print(len(smiles))
+    # TODO: Initiate the df here!
     df = pd.DataFrame()
-    df['Complex'] = smiles
+    df['ligand_ID'] = [l.GetProp("ID") for l in ligands]
+    df['ligands'] = [Chem.MolToSmiles(l) for l in ligands]
+    df['bind_site'] = bindsites
+     
+    for id, isomer in enumerate(args.isomer_pair):
+        # Bind unique ligands to the input isomer. 
+        new_mols, new_smiles = rejoin_mols(ligands, isomer)
+        # END
+        
+        # AddHs and sanitize smiles string
+        smiles = []
+        for s in new_smiles:
+            try:
+                m = Chem.AddHs(Chem.MolFromSmiles(s))
+                for i, a in enumerate(m.GetAtoms()):
+                    a.SetAtomMapNum(i+1)
+            except:
+                smiles.append(-1)
+                continue
+
+            s = Chem.MolToSmiles(m)
+            smiles.append(s)
+        df[f'smiles_{id}'] = smiles
+    # END
+    # NOTE: smiles and ligands_smiles now contain ligand, smile pairs.
     df.to_csv("smiles_out.csv")
     print("Saved smiles_out.csv with the complexes for screening")
