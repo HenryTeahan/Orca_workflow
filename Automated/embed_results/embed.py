@@ -206,7 +206,7 @@ args = parser.parse_args()
 xtb_path = args.xtb_path
 
 print(f"Input arguments {args} \n \n \n ------------------ \n")
-if args.xyz_files != None:
+if args.xyz_files != None and args.xyz_files != "None":
     for xyz in args.xyz_files:
         path = Path(xyz)
         print(f"Embedding {path.name}")
