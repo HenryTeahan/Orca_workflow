@@ -199,14 +199,14 @@ parser.add_argument("--smiles", default=None, type=str, help="Path to csv file c
 parser.add_argument("--smiles_col", default = "Complex", type=str, help="Column name containing the smiles of complexes for calculation")
 parser.add_argument("--xtb_path", default="/home/henryteahan/opt/xtb-6.7.0/xtb-dist/bin/xtb", type=str, help="Full path to xTB binaries")
 parser.add_argument("--charge", default=0, type=int, help="Central metal ion charge in complex")
-parser.add_argument("--xyz_files", nargs="+", default=None, help="input XYZ files - one or more")
+parser.add_argument("--xyz_files", type=str, default=None, help="input XYZ files - one or more")
 parser.add_argument("--ncpu", default=4, help="Number of processes")
 parser.add_argument("--N_tries", type=int, default = 20, help = "Number of embedding attempts")
 args = parser.parse_args()
 xtb_path = args.xtb_path
 
 print(f"Input arguments {args} \n \n \n ------------------ \n")
-if args.xyz_files != None:
+if args.xyz_files != None and args.xyz_files != "None":
     for xyz in args.xyz_files:
         path = Path(xyz)
         print(f"Embedding {path.name}")

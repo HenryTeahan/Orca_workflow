@@ -109,7 +109,9 @@ if __name__=="__main__":
     mem = args.mem
     partition = args.partition
     print(xyz_files)
-    if xyz_files and not (len(xyz_files) == 1 and xyz_files[0] in (None, "None")):
+    print(args)
+    print(type(xyz_files))
+    if xyz_files is not None:
         print("ERROR WITH XYZ FILE")
         for inp_file in xyz_files:
             qsub_name = qsub_prep(smiles=smiles, smiles_col=smiles_col, xyz_file=inp_file, cpus=cpus, N_tries=N_tries, mem=mem, partition=partition)
