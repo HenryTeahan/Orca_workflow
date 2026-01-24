@@ -135,10 +135,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("INPUT", type=str, help="INPUT SMILES CSV FILE")
     parser.add_argument("--smiles_column", type=str, default = "smiles_huckel_DFT_xyz")
-    parser.add_argument("--right_side", type=str, help="Right hand side of the molecule - amino acid and metal ion (Input string)", default = "O=C1O[Ni]N(C1C1=CC=CC=C1)C1=CC=CC=C1") # TODO: Make this accept a csv of right hand side structures.
+    parser.add_argument("--right_side", type="+", help="Right hand side of the molecule - amino acid and metal ion (Input string)", default = "O=C1O[Ni]N(C1C1=CC=CC=C1)C1=CC=CC=C1") # TODO: Make this accept a csv of right hand side structures.
     args = parser.parse_args()
 ### END
-
+    
     combined_frame = pd.read_csv(args.INPUT)
 
     sms = combined_frame[args.smiles_column].to_list()
@@ -185,7 +185,8 @@ if __name__ == "__main__":
     print("Number of unique mols", len(ligands))
     #Chem.Draw.MolsToGridImage(unique_mols, highlightAtomLists=bindsites, molsPerRow=5, subImgSize=(500,500), maxMols=50)
     
-
+    # TODO: Make below into a loop, where I repeat across multiple right hand sides, and then in the output file have various columns but indexing the same ligand.
+    #
     new_mols, new_smiles = rejoin_mols(ligands, args.right_side)
 
     smiles = []
