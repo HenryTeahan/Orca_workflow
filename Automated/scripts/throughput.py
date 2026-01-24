@@ -222,5 +222,7 @@ if __name__ == "__main__":
         df[f'smiles_{id}'] = smiles
     # END
     # NOTE: smiles and ligands_smiles now contain ligand, smile pairs.
+    df = df[df['smiles_0'] != "-1"]
+    df = df[df['smiles_0'] != -1]
     df.to_csv("smiles_out.csv")
     print("Saved smiles_out.csv with the complexes for screening")
