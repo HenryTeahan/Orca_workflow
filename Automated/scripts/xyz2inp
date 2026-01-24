@@ -36,8 +36,8 @@ def split_xyzs(filename):
                 raise ValueError(f"Not enough atom lines after natoms={natoms}")
 
             atoms = lines[start:end]
-
-            outname = f"{filename}struct_{structure_idx}.xyz"
+            filename = Path(filename)
+            outname = f"{filename.stem}struct_{structure_idx}.xyz"
             name_list.append(outname)
             with open(outname, "w") as out:
                 out.write(f"{natoms}\n")
