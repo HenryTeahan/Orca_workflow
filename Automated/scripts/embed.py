@@ -116,12 +116,15 @@ def embed_tmc_complex(smiles, xtb_path, coord_order=None, geometry=None, cpus=4)
             #lines = _file.readlines()
         with open("out.out", 'r') as _file:
             lines = _file.readlines()
+        e = None
         for line in lines:
             #print(line)
             if "TOTAL ENERGY" in line:
                 e = float(line.split()[3])
                 #print(line)
         mol = assign_coordinates2mol(sep_embed, "xtbopt.xyz", constraints)
+        if e is None:
+            raise ValueError("xtb output did not contain TOTAL ENERGY")
     except:
         print("failed at gfn2 constrain part")
         os.chdir("../")
