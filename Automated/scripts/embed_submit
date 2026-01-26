@@ -12,7 +12,7 @@ parser.add_argument("--xtb_path", default="/home/henryteahan/opt/xtb-6.7.0/xtb-d
 parser.add_argument("--charge", default=0, type=int, help="Central metal ion charge in complex")
 parser.add_argument("--xyz_files", nargs="+", default=None, help="input XYZ files - one or more")
 parser.add_argument("--ncpu", default=4, help="Number of processes")
-parser.add_argument("--N_tries", type=int, default = 20, help = "Number of embedding attempts")
+parser.add_argument("--N_tries", type=int, default = 10, help = "Number of embedding attempts")
 parser.add_argument("--mem", help="Mb of memory available", type=int, default=16000)
 parser.add_argument("--partition", help="HPC partition to run calculations on", type=str, default="kemi1")
 
@@ -89,8 +89,8 @@ export PYTHONPATH=/scratch/$SLURM_JOB_ID:$PYTHONPATH
 
 #Run calculations
 micromamba run -n Complex python embed.py --xyz_files {xyz_file} --smiles {smiles} --smiles_col {smiles_col} --N_tries {N_tries} --xtb_path /scratch/$SLURM_JOB_ID/xtb
-cp * {pwd}
-cp * {pwd}
+cp *.xyzs {pwd}
+rm -r *
     """.format(name_stem=name_stem, mem=mem, cpus=cpus, pwd=pwd, partition=partition, smiles=smiles, smiles_col=smiles_col, N_tries=N_tries, xyz_file=xyz_file)
     
     with open(slurm_filename, "w") as f:

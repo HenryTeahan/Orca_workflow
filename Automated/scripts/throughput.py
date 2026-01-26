@@ -4,6 +4,9 @@ import pandas as pd
 import argparse
 from rdkit.Chem.MolStandardize import rdMolStandardize
 import re
+
+pt = Chem.GetPeriodicTable()
+
 ### END
 def identify_bidentate(mol, TRANSITION_METALS_NUM, mdis):
     """
@@ -83,6 +86,7 @@ def remove_duplicate_mols(ligands, ligand_highlight):
             bindsites.append(high)
     return unique_mols, bindsites
 
+
 def rejoin_mols(ligands, right_side):
     """
     Joins the ligand and the right side of the molecule.
@@ -91,43 +95,91 @@ def rejoin_mols(ligands, right_side):
     mols = []
     smiles = []
 
-    right_side = Chem.MolFromSmiles(right_side)
-
+   # right_side = Chem.MolFromSmiles(right_side)
+    print("Joining right side", right_side, "with ligands")
     for ligand in ligands:
         try:
             # Default failure
             mols.append(-1)
             smiles.append(-1)
-
+            #
+            Chem.Kekulize(ligand)
             # Combine ligand and isomer
             comb = Chem.CombineMols(right_side, ligand)
             edcombo = Chem.EditableMol(comb)
             b_idx = []
+            rem_idx = []
             m_idx = -1
-
             for atom in comb.GetAtoms():
                 if atom.GetAtomicNum() == 28: #TODO: Assumes use of Ni metal 
                     m_idx = atom.GetIdx()
                     continue # Skip central metal ion
 
                 if atom.HasProp("binding_site"):
-                    b_idx.append(atom.GetIdx()) # Append if binding site
-
+                    b_idx.append(atom.GetIdx()) # Append if binding site    
+                    valence = atom.GetTotalValence()
+                    norm_valence = pt.GetDefaultValence(atom.GetAtomicNum())
+                    remaining = norm_valence - valence
+                    rem_idx.append(remaining)
+                    
             if m_idx == -1 or not b_idx:
                 continue
-    
-            for val in b_idx:
-                edcombo.AddBond(m_idx, val, order=Chem.BondType.SINGLE)
+                
+            for rem, val in zip(rem_idx, b_idx):
+                if rem >= 1:
+                    edcombo.AddBond(val, m_idx, order=Chem.BondType.SINGLE)
+                else:
+                    edcombo.AddBond(val, m_idx, order=Chem.BondType.DATIVE)
+            
             
             f = edcombo.GetMol()
+
+            for atom in f.GetAtoms():
+                if atom.HasProp("binding_site"):
+                    atom.SetFormalCharge(0)
             s = Chem.MolToSmiles(f, canonical=True)
-            
             smiles[-1] = s
             mols[-1] = f
         except:
+            #print("Error")
             continue
     return mols, smiles
+def parse_rejoined_mols(ligands, right_side):
+    if isinstance(right_side, list):
+        right_side = [Chem.MolFromSmiles(r) for r in right_side]
+    else:
+        right_side = Chem.MolFromSmiles(right_side)
+    print("isomer in mol", right_side)
+    output, smiles_output = rejoin_mols(ligands, right_side)
+    #print(output, smiles_output)
+    #output = [t for t in output if type(t) != int]
+    smiles_output = []
+    clean_mols = []
+    for i, m in enumerate(output):
+        try:
+            for atom in m.GetAtoms():
+                num_radicals = atom.GetNumRadicalElectrons() # REMOVE RANDOM RADICALS LEFT OVER
+                if num_radicals:
+                    atom.SetNumExplicitHs(atom.GetNumExplicitHs() + 1)
+                    atom.SetNumRadicalElectrons(0)
+            m.UpdatePropertyCache()
+            
+            Chem.SanitizeMol(m)
+            m = Chem.AddHs(m)
+            for i,a in enumerate(m.GetAtoms()):
+                a.SetAtomMapNum(i+1)
 
+            smiles_output.append(Chem.MolToSmiles(m))
+            clean_mols.append(m)
+        except:
+            smiles_output.append(-1)
+            clean_mols.append(-1)
+            #print("FAILED", i)
+            continue
+    successful_smiles = [s for s in smiles_output if type(s) != int] 
+    print(f"Succesfully parsed {len(successful_smiles)} mols ({len(successful_smiles)/len(ligands)*100:.2f}%)")
+    return smiles_output, clean_mols
+#smiles, mols = parse_rejoined_mols(unique_mols, central_metal)
 if __name__ == "__main__":
     # BEGIN INPUT PARSING
     parser = argparse.ArgumentParser()
@@ -135,7 +187,8 @@ if __name__ == "__main__":
     parser.add_argument("--smiles_column", type=str, default = "smiles_huckel_DFT_xyz")
     parser.add_argument("--isomer_pair", nargs="+", help="Right hand side of the molecule - isomer pairs and metal ion (Input string)",
                         default = ["O=C1O[Ni]N(C1C1=CC=CC=C1)C1=CC=CC=C1","O=C1O[Ni]C(N1C1=CC=CC=C1)C1=CC=CC=C1"])
-    # By default, uses isomer1 and isomer2
+    parser.add_argument("--outname", type=str, default="smiles_out.csv", help="Name of output file")
+    # By default, uses isomer1 and isomer2s
     args = parser.parse_args()
     ### END
     
@@ -193,6 +246,7 @@ if __name__ == "__main__":
     # Remove duplicate ligands
     ligands, bindsites = remove_duplicate_mols(ligands_flattened, ligand_highlight)
     print("Number of unique mols", len(ligands))
+    #print(ligands)
     # END
 
     # TODO: Initiate the df here!
@@ -202,27 +256,15 @@ if __name__ == "__main__":
     df['bind_site'] = bindsites
      
     for id, isomer in enumerate(args.isomer_pair):
-        # Bind unique ligands to the input isomer. 
-        new_mols, new_smiles = rejoin_mols(ligands, isomer)
+        # Bind unique ligands to the input isomer.
+        print("Isomer", isomer)
+        new_smiles, new_mols = parse_rejoined_mols(ligands, isomer)
         # END
-        
-        # AddHs and sanitize smiles string
-        smiles = []
-        for s in new_smiles:
-            try:
-                m = Chem.AddHs(Chem.MolFromSmiles(s))
-                for i, a in enumerate(m.GetAtoms()):
-                    a.SetAtomMapNum(i+1)
-            except:
-                smiles.append(-1)
-                continue
-
-            s = Chem.MolToSmiles(m)
-            smiles.append(s)
-        df[f'smiles_{id}'] = smiles
+        df[f'smiles_{id}'] = new_smiles
     # END
     # NOTE: smiles and ligands_smiles now contain ligand, smile pairs.
     df = df[df['smiles_0'] != "-1"]
     df = df[df['smiles_0'] != -1]
-    df.to_csv("smiles_out.csv")
+    df.to_csv(args.outname)
     print("Saved smiles_out.csv with the complexes for screening")
+    print(df.head(n=10))

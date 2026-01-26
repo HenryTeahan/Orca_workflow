@@ -1,0 +1,10 @@
+[
+  {
+    "mol_ID": 0,
+    "ligand_ID": 0,
+    "XYZ": "0_0_confs.xyzs",
+    "xTB_energies": [
+      -72119.15797583369
+    ]
+  }
+]

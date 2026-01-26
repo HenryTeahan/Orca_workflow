@@ -17,6 +17,7 @@ from prism_pruner.conformer_ensemble import ConformerEnsemble
 from prism_pruner.pruner import prune
 from pebble import ProcessExpired, ProcessPool
 import numpy as np
+import json
 ### END
 
 ### Functions
@@ -116,15 +117,12 @@ def embed_tmc_complex(smiles, xtb_path, coord_order=None, geometry=None, cpus=4)
             #lines = _file.readlines()
         with open("out.out", 'r') as _file:
             lines = _file.readlines()
-        e = None
         for line in lines:
             #print(line)
             if "TOTAL ENERGY" in line:
                 e = float(line.split()[3])
                 #print(line)
         mol = assign_coordinates2mol(sep_embed, "xtbopt.xyz", constraints)
-        if e is None:
-            raise ValueError("xtb output did not contain TOTAL ENERGY")
     except:
         print("failed at gfn2 constrain part")
         os.chdir("../")
@@ -196,118 +194,186 @@ def run_xTB(tmp_dir, xyz, ncpu, xtb_path):
         shutil.copy(out, Path.cwd() / out.name)
         return out
 
-parser = argparse.ArgumentParser()
-print("Starting parsing")
-parser.add_argument("--smiles", default=None, type=str, help="Path to csv file containing smiles of complexes for calculation")
-parser.add_argument("--smiles_col", default = "Complex", type=str, help="Column name containing the smiles of complexes for calculation")
-parser.add_argument("--xtb_path", default="/home/henryteahan/opt/xtb-6.7.0/xtb-dist/bin/xtb", type=str, help="Full path to xTB binaries")
-parser.add_argument("--charge", default=0, type=int, help="Central metal ion charge in complex")
-parser.add_argument("--xyz_files", type=str, default=None, help="input XYZ files - one or more")
-parser.add_argument("--ncpu", default=4, help="Number of processes")
-parser.add_argument("--N_tries", type=int, default = 20, help = "Number of embedding attempts")
-args = parser.parse_args()
-xtb_path = args.xtb_path
+def embed(smile, mol_ID, ligand_ID, xtb_path, outdir):
+    '''Wrapper to run the embedding workflow - inputs: Smiles as list of rdkit.smiles; xtb_path - path to xTB. Charge and N_tries are hardcoded. 
+        Outdir: embedding directory - manifest.json saved here containing data.'''
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    manifest = [] # .json file to track the progress
+    tmp_dir = Path.cwd() / "tmp"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    #for s_ID, smile in zip(smile_ID, smiles): #TODO: Make this into nested parallel loop.
+    with pushd(tmp_dir):
+        possible_coord_orders = get_possible_coord_permutations(smile)
+        stereo_confs = []
+        energies = []
+        for coord_order in possible_coord_orders:
+            mol, es = get_tmc_mol(smile, xtb_path, coord_order, N_tries=1, cpus = 8)
+            stereo_confs.extend(mol)
+            energies.extend(es)
+    all_xyz_confs = ""
+    for i in range(len(stereo_confs)):
+        xyz_data = mkxyzblock(stereo_confs[i], str(energies[i])) # Making original xyz-files
+        all_xyz_confs += xyz_data + "\n"
+    
+    # Remove empty lines
+    all_xyz_confs = "\n".join(line for line in all_xyz_confs.splitlines() if line.strip())
+    
+    with pushd(tmp_dir):
+        filename = f"embed.xyz"
+        out_path = Path.cwd() / filename
+        out_path.write_text(all_xyz_confs)
 
-print(f"Input arguments {args} \n \n \n ------------------ \n")
-if args.xyz_files != None and args.xyz_files != "None":
-    for xyz in args.xyz_files:
-        path = Path(xyz)
-        print(f"Embedding {path.name}")
+    ensemble = ConformerEnsemble.from_xyz(out_path, read_energies=True)
+    pruned, mask = prune(
+    ensemble.coords,
+    ensemble.atoms,
+    rot_corr_rmsd_pruning=True,
+    debugfunction=print,
+    )
+    atoms = ensemble.atoms
+    coords = ensemble.coords[mask]
+    energies = ensemble.energies[mask]
+    
+    unique_E = energies*EH_TO_KCAL
+    mask_more = unique_E - unique_E.min() < 3 ### UNIQUE CONFORMERS WITHN 3 kcal / mol of the lowest!!!
+    print("Number of conformers within energy tolerance",sum(mask_more))
+    filename = f"{mol_ID}_{ligand_ID}_confs.xyzs"
+    out_path = outdir / filename
+    ConformerEnsemble(coords[mask_more],atoms, energies[mask_more]).to_xyz(out_path)
 
-        # The xyz file must be in the working directory.
-        if not (Path.cwd() / path.name).exists():
-            shutil.copy(path, Path.cwd() / path.name)
+    manifest.append({
+        "mol_ID": mol_ID,
+        "ligand_ID": ligand_ID,
+        "XYZ": filename,
+        "xTB_energies": list(unique_E[mask_more])
+    })
 
-        # Move into tmp directory and run calculations.
+    json_path = outdir / "conformers.json"
+    with open(json_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+
+    return manifest
+
+
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    print("Starting parsing")
+    parser.add_argument("--smiles", default=None, type=str, help="Path to csv file containing smiles of complexes for calculation")
+    parser.add_argument("--smiles_col", default = "smiles_1", type=str, help="Column name containing the smiles of complexes for calculation")
+    parser.add_argument("--xtb_path", default="/home/henryteahan/opt/xtb-6.7.0/xtb-dist/bin/xtb", type=str, help="Full path to xTB binaries")
+    parser.add_argument("--charge", default=0, type=int, help="Central metal ion charge in complex")
+    parser.add_argument("--xyz_files", nargs="+", default=None, help="input XYZ files - one or more")
+    parser.add_argument("--ncpu", default=4, help="Number of processes")
+    parser.add_argument("--N_tries", type=int, default = 20, help = "Number of embedding attempts")
+    args = parser.parse_args() 
+    xtb_path = args.xtb_path
+
+    print(f"Input arguments {args} \n \n \n ------------------ \n")
+    if args.xyz_files != None:
+        for xyz in args.xyz_files:
+            path = Path(xyz)
+            print(f"Embedding {path.name}")
+
+            # The xyz file must be in the working directory.
+            if not (Path.cwd() / path.name).exists():
+                shutil.copy(path, Path.cwd() / path.name)
+
+            # Move into tmp directory and run calculations.
+            tmp_dir = Path.cwd() / "tmp"
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy(path, tmp_dir)
+            # Use TMC_embed tools and extract smiles and embed molecules.
+            xyz = tmp_dir /  path.name
+            
+            # Extract the transition metal files from the .xyz file.
+            # TODO: Add the option to not use .xyz files and rather use smiles.
+            with pushd(tmp_dir):
+                smiles = extract_TMC_smiles(str(xyz), charge = 0)
+            target = f"Ni"
+            print(smiles[smiles.find(target)-10:smiles.find(target)+10])
+            pattern = r"(Ni)@.*?(:)"
+            smiles = re.sub(pattern, r"\1+2\2", smiles)
+            print(smiles[smiles.find(target)-10:smiles.find(target)+10])
+            with pushd(tmp_dir):
+                possible_coord_orders = get_possible_coord_permutations(smile)
+                stereo_confs = []
+                energies = []
+                for coord_order in possible_coord_orders:
+                    mol, es = get_tmc_mol(smile, xtb_path, coord_order, N_tries=args.N_tries, cpus = args.ncpu)
+                    stereo_confs.extend(mol)
+                    energies.extend(es)
+            
+            name = f"{path.stem}"
+            for i in range(len(stereo_confs)):
+                try:
+                    xyz_data = mkxyzblock(stereo_confs[i], str(energies[i])) # Making original xyz-files
+                except:
+                    print("Error", stereo_confs)
+                filename = f"{name}_embed_{i}.xyz"
+                out_path = Path.cwd() / filename
+                out_path.write_text(xyz_data)
+            
+                # TODO: Update xyz file handling in this 
+                # RUN xTB SP 
+                #out = run_xTB(tmp_dir, out_path, ncpu=args.ncpu) ### RUNS FROM THE EXECUTED FOLDER LOCATION
+                # Get xTB SP energy and return the best geometry in the working directory
+                #df = extract_energy(out)    
+    elif args.smiles != None:
+        smiles = pd.read_csv(args.smiles)
+        smiles = smiles[args.smiles_col]
+        path = Path(args.smiles)
         tmp_dir = Path.cwd() / "tmp"
         tmp_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy(path, tmp_dir)
-        # Use TMC_embed tools and extract smiles and embed molecules.
-        xyz = tmp_dir /  path.name
-        
-        # Extract the transition metal files from the .xyz file.
-        # TODO: Add the option to not use .xyz files and rather use smiles.
-        with pushd(tmp_dir):
-            smiles = extract_TMC_smiles(str(xyz), charge = 0)
-        target = f"Ni"
-        print(smiles[smiles.find(target)-10:smiles.find(target)+10])
-        pattern = r"(Ni)@.*?(:)"
-        smiles = re.sub(pattern, r"\1+2\2", smiles)
-        print(smiles[smiles.find(target)-10:smiles.find(target)+10])
-        with pushd(tmp_dir):
-            possible_coord_orders = get_possible_coord_permutations(smile)
-            stereo_confs = []
-            energies = []
-            for coord_order in possible_coord_orders:
-                mol, es = get_tmc_mol(smile, xtb_path, coord_order, N_tries=args.N_tries, cpus = args.ncpu)
-                stereo_confs.extend(mol)
-                energies.extend(es)
-        
-        name = f"{path.stem}"
-        for i in range(len(stereo_confs)):
-            try:
+        smile_index = 0
+        for row, smile in enumerate(smiles): #TODO: Make this into nested parallel loop.
+            with pushd(tmp_dir):
+                possible_coord_orders = get_possible_coord_permutations(smile)
+                stereo_confs = []
+                energies = []
+                for coord_order in possible_coord_orders:
+                    mol, es = get_tmc_mol(smile, xtb_path, coord_order, N_tries=args.N_tries, cpus = args.ncpu)
+                    stereo_confs.extend(mol)
+                    energies.extend(es)
+            name = f"{path.stem}"
+            all_xyz_confs = ""
+            for i in range(len(stereo_confs)):
+
                 xyz_data = mkxyzblock(stereo_confs[i], str(energies[i])) # Making original xyz-files
-            except:
-                print("Error", stereo_confs)
-            filename = f"{name}_embed_{i}.xyz"
-            out_path = Path.cwd() / filename
-            out_path.write_text(xyz_data)
-        
-            # TODO: Update xyz file handling in this 
-            # RUN xTB SP 
-            #out = run_xTB(tmp_dir, out_path, ncpu=args.ncpu) ### RUNS FROM THE EXECUTED FOLDER LOCATION
-            # Get xTB SP energy and return the best geometry in the working directory
-            #df = extract_energy(out)    
-            #print(df)       
-elif args.smiles != None:
-    smiles = pd.read_csv(args.smiles)
-    smiles = smiles[args.smiles_col]
-    path = Path(args.smiles)
-    tmp_dir = Path.cwd() / "tmp"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy(path, tmp_dir)
-    smile_index = 0
-    for row, smile in enumerate(smiles): #TODO: Make this into nested parallel loop.
-        with pushd(tmp_dir):
-            possible_coord_orders = get_possible_coord_permutations(smile)
-            stereo_confs = []
-            energies = []
-            for coord_order in possible_coord_orders:
-                mol, es = get_tmc_mol(smile, xtb_path, coord_order, N_tries=args.N_tries, cpus = args.ncpu)
-                stereo_confs.extend(mol)
-                energies.extend(es)
-        name = f"{path.stem}"
-        all_xyz_confs = ""
-        for i in range(len(stereo_confs)):
-
-            xyz_data = mkxyzblock(stereo_confs[i], str(energies[i])) # Making original xyz-files
-            print(xyz_data)
-            all_xyz_confs += xyz_data + "\n"
-        
+                all_xyz_confs += xyz_data + "\n"
+            
 # Remove empty lines
-        all_xyz_confs = "\n".join(line for line in all_xyz_confs.splitlines() if line.strip())
-        
-        with pushd(tmp_dir):
-            filename = f"{name}_embed_{row}.xyz"
-            out_path = Path.cwd() / filename
-            out_path.write_text(all_xyz_confs)
-        #TODO: rewrite to not have to write and then reread. 
-        ensemble = ConformerEnsemble.from_xyz(out_path, read_energies=True)
-        pruned, mask = prune(
-        ensemble.coords,
-        ensemble.atoms,
+            all_xyz_confs = "\n".join(line for line in all_xyz_confs.splitlines() if line.strip())
+            
+            with pushd(tmp_dir):
+                filename = f"{name}_embed_{row}.xyz"
+                out_path = Path.cwd() / filename
+                out_path.write_text(all_xyz_confs)
+            #TODO: rewrite to not have to write and then reread. 
+            ensemble = ConformerEnsemble.from_xyz(out_path, read_energies=True)
+            pruned, mask = prune(
+            ensemble.coords,
+            ensemble.atoms,
 
-        rot_corr_rmsd_pruning=True,
-        debugfunction=print,
-        )
-        atoms = ensemble.atoms
-        coords = ensemble.coords[mask]
-        energies = ensemble.energies[mask]
-        unique_E = energies*EH_TO_KCAL
-        mask_more = unique_E - unique_E.min() < 3 ### UNIQUE CONFORMERS WITHN 3 kcal / mol of the lowest!!!
-        filename = f"{name}_id_{smile_index}.xyzs"
-        out_path = Path.cwd() / filename
-        ConformerEnsemble(coords[mask_more],atoms, energies[mask_more]).to_xyz(out_path)
-        smile_index += 1
+            rot_corr_rmsd_pruning=True,
+            debugfunction=print,
+            )
+            atoms = ensemble.atoms
+            coords = ensemble.coords[mask]
+            energies = ensemble.energies[mask]
+            unique_E = energies*EH_TO_KCAL
+            mask_more = unique_E - unique_E.min() < 3 ### UNIQUE CONFORMERS WITHN 3 kcal / mol of the lowest!!!
+            print("Number of conformers within energy tolerance",sum(mask_more))
+            filename = f"{name}_id_{smile_index}.xyzs"
+            out_path = Path.cwd() / filename
+            ConformerEnsemble(coords[mask_more],atoms, energies[mask_more]).to_xyz(out_path)
+            smile_index += 1
 # Clean up tmp folder
-shutil.rmtree(tmp_dir)
+    shutil.rmtree(tmp_dir)
+
+
+if __name__ == "__main__":
+    main()
