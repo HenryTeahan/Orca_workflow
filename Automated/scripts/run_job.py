@@ -9,31 +9,76 @@ import pandas as pd
 import textwrap
 import subprocess
 import numpy as np
+import threading
+import time
 ### INITIATE DB
 #DB_PATH = Path.home() / "Projects/Orca_workflow/Automated/db/jobs.db"
 
-
+def is_job_running(slurm_job_id):
+    result = subprocess.run(
+            ["squeue", "-j", str(slurm_job_id), "-h"],
+            capture_output=True, text=True)
+    print("Job check", result)
+    return bool(result.stdout.strip())
+def monitor_orca_jobs(conn, cur):
+    cur.execute("""
+                SELECT job_id, inp_file, slurm_job_id
+                FROM jobs
+                WHERE status="orca_submitted"
+                """)
+    rows = cur.fetchall()
+    if not rows:
+        print("No submitted orca tasks yet, take a nap!!")
+        return
+    for job_id, inp_file, slurm_job_id in rows:
+        inp_path = Path(inp_file)
+        out_file = Path("Orca_run") / inp_path.name.replace(".inp", ".out")
+        err_file = Path("Orca_run") / inp_path.name.replace(".inp", ".err")
+        if is_job_running(slurm_job_id):
+            continue
+    
+        if err_file.exists() and err_file.stat().st_size > 0:
+            print(f"Orca failed :-( {inp_file}")
+            cur.execute("""
+                        UPDATE jobs
+                        SET status="error", error="Orca failed"
+                        WHERE job_id=?
+                        """, (job_id,))
+            conn.commit()
+            continue
+        try: #If no error and job complete
+            df = extract_energy(out_file)
+            gibbs_free = df['Final Gibbs free energy']
+            cur.execute("""
+                        UPDATE jobs
+                        SET best_energy = ?
+                        WHERE inp_file = ?
+                        """, (gibbs_free, inp_file))
+        except Exception as e:
+            print("Error in parsing", e)
 
 def submit_orca(inp_file, job_dir, ncpus = 8, mem = 16000): #TODO: FIX THE ROUTING HERE - write in scratch but copy out of!
     inp_stem = Path(inp_file).stem
-    slurm_filename = f"submit_{inp_stem}.slurm"
+    slurm_filename = job_dir / f"submit_{inp_stem}.slurm"
     sbatch_script = f"""#!/bin/bash
 #SBATCH --job-name={inp_file}
-#SBATCH --cpus_per_task={ncpus}
+#SBATCH --nodes=1
+#SBATCH --ntasks={ncpus}
 #SBATCH --mem {mem}
-#SBATCH --time=10-00:00:00
+#SBATCH --time=02:00:00
 #SBATCH --output={job_dir}/{inp_file}.out
 #SBATCH --error={job_dir}/{inp_file}.err
 #SBATCH --partition=kemi1
 #Move to scratch dir for calculations
-
+module load mpi/openmpi-x86_64
+cp {inp_file} /scratch/$SLURM_JOB_ID/
 cd /scratch/$SLURM_JOB_ID/
 
 /groups/kemi/hteahan/opt/orca_6_1_0_linux_x86-64_shared_openmpi418/orca {inp_file}
 
 mv *.out {job_dir}
 mv *.err {job_dir}
-""".format(mem=mem, ncpus=ncpus, job_dir=job_dir, partition=partition, inp_file=inp_file)
+""".format(mem=mem, ncpus=ncpus, job_dir=job_dir, inp_file=inp_file)
     
     slurm_filename.write_text(sbatch_script)
     result = subprocess.run(["sbatch", str(slurm_filename)],
@@ -43,6 +88,14 @@ mv *.err {job_dir}
     job_id = result.stdout.strip().split()[-1]
     return job_id # Track slurm task by id
 
+def monitoring_thread(DB_PATH, poll_interval=30):
+    thread_conn = sqlite3.connect(DB_PATH)
+    thread_cur = thread_conn.cursor()
+    while True:
+        monitor_orca_jobs(thread_conn, thread_cur)  # the function from before
+        time.sleep(poll_interval)
+
+
 
 def main(args):
     DB_PATH = Path(args.DB_PATH)
@@ -51,7 +104,7 @@ def main(args):
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-
+    
     cur.execute("""
 CREATE TABLE IF NOT EXISTS jobs (
     job_id INTEGER PRIMARY KEY,
@@ -64,6 +117,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     inp_file TEXT,
     status TEXT,
     job_dir TEXT,
+    slurm_job_id TEXT,
     error TEXT,
     best_energy REAL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -72,7 +126,12 @@ CREATE TABLE IF NOT EXISTS jobs (
     ### END
 
     print("MADE DATABASE") 
-    outdir = Path(Path.cwd() / "Output")
+    t = threading.Thread(target=monitoring_thread, args=(DB_PATH,))
+    t.daemon = False
+    t.start()
+
+    outdir = Path(Path.cwd() / "Orca_run")
+    outdir.mkdir(parents=True, exist_ok=True)
 
     scratch = Path(args.SCRATCH_DIR)
     scratch.mkdir(parents=True, exist_ok=True)
@@ -94,7 +153,7 @@ CREATE TABLE IF NOT EXISTS jobs (
             conformers = embed(smile, mol_ID, lig_ID, xtb_path, embed_dir)
             print(conformers) 
             cur.execute("""
-                        INSERT OR IGNORE INTO jobs
+                        INSERT INTO jobs
                         (ligand_id, mol_id, ligand_smiles, xyz_file, xtb_energy, status, job_dir)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                         """, (conformers["ligand_ID"], conformers['mol_ID'], smile, conformers["XYZ"], json.dumps(conformers["xTB_energies"]), "complete", str(embed_dir)))
@@ -102,7 +161,7 @@ CREATE TABLE IF NOT EXISTS jobs (
         except Exception as e:
             print("Error in embedding:", e)
             cur.execute("""
-            INSERT OR IGNORE INTO jobs
+            INSERT INTO jobs
             (ligand_id, mol_id, ligand_smiles, status)
             VALUES (?, ?, ?, ?)
             """, (lig_ID, mol_ID, smile, "ERROR in embedding"))
@@ -112,37 +171,46 @@ CREATE TABLE IF NOT EXISTS jobs (
             xyz = Path(embed_dir)/conformers["XYZ"]
             multiplicity = np.abs(charge) + 1 # Use simplest states -> If S = 0; multiplicity=1, If S = 1/2; multiplicity 2... 
             inp_files = xyzs_to_inp(xyz, charge, multiplicity, ncpus = 8, mem = 16000)        
-            cur.execute("""
-                UPDATE jobs
-                SET status="inputs_created", inp_file=?
-                WHERE xyz_file=?
-                """, (json.dumps([str(f) for f in inp_files]), conformers["XYZ"]))
-            conn.commit()
+            for inp_file in inp_files:
+                cur.execute("""
+                    UPDATE jobs
+                    SET inp_file=?, status='inputs_created'
+                    WHERE xyz_file=? and ligand_id=?
+                    """, (str(inp_file), str(xyz), lig_ID))
+                conn.commit()
         except Exception as e:
             print("Error in INP File generation:", e)
             cur.execute("""
-            INSERT OR IGNORE INTO jobs
-            (ligand_id, mol_id, ligand_smiles, status)
-            VALUES (?, ?, ?, ?)
-            """, (lig_ID, mol_ID, smile, "ERROR in INP FILE Generation"))
-        for inp_file in inp_files:
-            try:
-                job_id = submit_orca(inp_file, job_dir=outdir, ncpus=8, mem=16000)
+            UPDATE jobs
+            SET status='input_gen_failed'
+            WHERE xyz_file=? and ligand_id=?
+            """, (str(xyz), lig_ID))
 
+        for inp_file in inp_files:
+            inp_path = Path(inp_file)
+            print(inp_path)
+            try:
+                job_id = submit_orca(inp_path, job_dir=outdir, ncpus=8, mem=16000)
                 print(f"Submitted ORCA job {inp_file} as Slurm ID {job_id}")
+
+                # Update DB row for this specific inp_file
                 cur.execute("""
-                            UPDATE jobs
-                            SET status='orca_submitted', slurm_job_id=?
-                            WHERE inp_file LIKE ?
-                            """, (job_id, f"%{inp_file.name}%"))
+                    UPDATE jobs
+                    SET status='orca_submitted', slurm_job_id=?
+                    WHERE inp_file=?
+                """, (job_id, str(inp_file)))
                 conn.commit()
             except Exception as e:
                 print(f"Error submitting {inp_file}: {e}")
                 cur.execute("""
-                            UPDATE jobs
-                            SET status='error_in_orca_submit', slurm_job_id=?
-                            WHERE inp_file LIKE ?
-                            """, (job_id, f"%{inp_file.name}%"))
+                    UPDATE jobs
+                    SET status='error_in_orca_submit', error=?
+                    WHERE inp_file=?
+                """, (str(e), str(inp_file)))
+                conn.commit()
+    t.join()
+
+
 
             
 if __name__ == "__main__":

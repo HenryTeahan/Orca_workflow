@@ -3,20 +3,21 @@
 import argparse
 from pathlib import Path
 
-def xyz_to_inp(file, charge, multiplicity, keep_lines, query):
+def xyz_to_inp(file, charge, multiplicity, keep_lines, query, please_return=False):
   with open(file, "r") as f:
     txt = f.readlines()
     txt = txt[int(keep_lines):] #skipfirst two lines
     txt = "".join(txt)
     # query = f"!r2scan-3c opt freq \n \n * XYZ {args.charge} {args.multiplicity} \n"
-    buffer = f"\n \n * XYZ {charge} {multiplicity} \n"
-    inp = query + buffer + txt + f"\n *"
+    buffer = f"\n \n* XYZ {charge} {multiplicity} \n"
+    inp = query + buffer + txt + f"\n*"
 
     xyz_path = Path(file)
     out = Path(".") / f"{xyz_path.stem}.inp"
     print(f"Wrote {out} :-)")
     out.write_text(inp)
-
+    if please_return == True:
+        return out
 def split_xyzs(filename):
     with open(filename, "r") as f:
         lines = [line.strip() for line in f if line.strip()]
@@ -51,10 +52,13 @@ def split_xyzs(filename):
 
 def xyzs_to_inp(filename, charge, multiplicity, ncpus, mem):
     name_list = split_xyzs(filename)
+    inps = []
     for n in name_list:
-        xyz_to_inp(n, charge, multiplicity, keep_lines=2, query=f"!r2scan-3c opt freq \n %pal \n nprocs {ncpus} \n end \n %maxcore {mem*0.76}")
+        inp = xyz_to_inp(n, charge, multiplicity, keep_lines=2, query=f"!r2scan-3c opt freq \n%pal \nnprocs {ncpus} \nend \n%maxcore {int(mem*0.75)}", please_return=True)
+        inps.append(inp)
         Path(n).unlink()
-    return name_list
+    print(filename, " made inps:", inps)
+    return inps
 
 
 def main():

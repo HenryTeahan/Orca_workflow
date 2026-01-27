@@ -8,5 +8,5 @@
 #SBATCH --partition=kemi1        # or your default partition
 
 # Run the workflow manager
-python /groups/kemi/hteahan/Orca_workflow/Automated/scripts/run_job.py --DB_PATH /groups/kemi/hteahan/Orca_workflow/Automated/db/jobs.db --SMILES /groups/kemi/hteahan/Orca_workflow/Automated/test.csv --SMILES_COL smiles_0 --CHARGE_COL charge_0 --ID_COL ligand_ID --JOB_ID test_job --SCRATCH_DIR /scratch/$SLURM_JOB_ID --xTB_path /groups/kemi/hteahan/opt/xtb-7.7.1/xtb-dist/bin/xtb
+python /groups/kemi/hteahan/Orca_workflow/Automated/scripts/run_job.py --DB_PATH /groups/kemi/hteahan/Orca_workflow/Automated/db/jobs.db --SMILES /groups/kemi/hteahan/Orca_workflow/Automated/csvs/test.csv --SMILES_COL smiles_0 --CHARGE_COL charge_0 --ID_COL ligand_ID --JOB_ID test_job --SCRATCH_DIR /scratch/$SLURM_JOB_ID --xTB_path /groups/kemi/hteahan/opt/xtb-6.7.1/xtb-dist/bin/xtb
 
