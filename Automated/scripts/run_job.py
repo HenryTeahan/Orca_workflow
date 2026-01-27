@@ -10,7 +10,7 @@ import textwrap
 import subprocess
 import numpy as np
 ### INITIATE DB
-DB_PATH = Path.home() / "Projects/Orca_workflow/Automated/db/jobs.db"
+#DB_PATH = Path.home() / "Projects/Orca_workflow/Automated/db/jobs.db"
 
 
 
@@ -22,8 +22,8 @@ def submit_orca(inp_file, job_dir, ncpus = 8, mem = 16000): #TODO: FIX THE ROUTI
 #SBATCH --cpus_per_task={ncpus}
 #SBATCH --mem {mem}
 #SBATCH --time=10-00:00:00
-#SBATCH --output={pwd}/{inp_file}.out
-#SBATCH --error={pwd}/{inp_file}.err
+#SBATCH --output={job_dir}/{inp_file}.out
+#SBATCH --error={job_dir}/{inp_file}.err
 #SBATCH --partition=kemi1
 #Move to scratch dir for calculations
 
@@ -31,9 +31,9 @@ cd /scratch/$SLURM_JOB_ID/
 
 /groups/kemi/hteahan/opt/orca_6_1_0_linux_x86-64_shared_openmpi418/orca {inp_file}
 
-mv *.out {pwd}
-mv *.err {pwd}
-""".format(mem=mem, cpus=cpus, pwd=pwd, partition=partition, inp_file=inp_file)
+mv *.out {job_dir}
+mv *.err {job_dir}
+""".format(mem=mem, cpus=cpus, job_dir=job_dir, partition=partition, inp_file=inp_file)
     
     slurm_filename.write_text(sbatch_script)
     result = subprocess.run(["sbatch", str(slurm_filename)],
@@ -45,7 +45,7 @@ mv *.err {pwd}
 
 
 def main(args):
-    DB_PATH.parent.mkdir(exist_ok=True, parents=True)
+    args.DB_PATH.parent.mkdir(exist_ok=True, parents=True)
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -148,6 +148,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--SMILES", type=str, help="File containing smiles", required = True)
     parser.add_argument("--SMILES_COL", type=str, help="Column in SMILES containing the smiles", required = True)
+    parser.add_argument("--DB_PATH", type=str, help="Full path to DB", required = True)
     parser.add_argument("--CHARGE_COL", type=str, help="Column in SMILES containing the charges", default = "charge_0")
     parser.add_argument("--ID_COL", type=str, default="ID", help="ID column in SMILES making tracking of ligands easier")
     #parser.add_argument("ISOMER", type) #TODO: Make throughput.py run in here
