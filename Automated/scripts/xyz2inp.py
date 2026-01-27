@@ -49,10 +49,10 @@ def split_xyzs(filename):
             i += 1  # skip lines until we hit a natoms flag
     return name_list
 
-def xyzs_to_inp(filename, charge, multiplicity):
+def xyzs_to_inp(filename, charge, multiplicity, ncpus, mem):
     name_list = split_xyzs(filename)
     for n in name_list:
-        xyz_to_inp(n, charge, multiplicity, keep_lines=2, query=f"!r2scan-3c opt freq")
+        xyz_to_inp(n, charge, multiplicity, keep_lines=2, query=f"!r2scan-3c opt freq \n %pal \n nprocs {ncpus} \n end \n %maxcore {mem*0.76}")
         Path(n).unlink()
     return name_list
 
