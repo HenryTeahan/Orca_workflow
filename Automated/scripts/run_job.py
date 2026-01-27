@@ -33,7 +33,7 @@ cd /scratch/$SLURM_JOB_ID/
 
 mv *.out {job_dir}
 mv *.err {job_dir}
-""".format(mem=mem, cpus=cpus, job_dir=job_dir, partition=partition, inp_file=inp_file)
+""".format(mem=mem, ncpus=ncpus, job_dir=job_dir, partition=partition, inp_file=inp_file)
     
     slurm_filename.write_text(sbatch_script)
     result = subprocess.run(["sbatch", str(slurm_filename)],
@@ -45,7 +45,8 @@ mv *.err {job_dir}
 
 
 def main(args):
-    Path(args.DB_PATH).parent.mkdir(exist_ok=True, parents=True)
+    DB_PATH = Path(args.DB_PATH)
+    DB_PATH.parent.mkdir(exist_ok=True, parents=True)
     
 
     conn = sqlite3.connect(DB_PATH)
@@ -110,7 +111,7 @@ CREATE TABLE IF NOT EXISTS jobs (
         try:    
             xyz = Path(embed_dir)/conformers["XYZ"]
             multiplicity = np.abs(charge) + 1 # Use simplest states -> If S = 0; multiplicity=1, If S = 1/2; multiplicity 2... 
-            inp_files = xyzs_to_inp(xyz, charge, multiplicity)        
+            inp_files = xyzs_to_inp(xyz, charge, multiplicity, ncpus = 8, mem = 16000)        
             cur.execute("""
                 UPDATE jobs
                 SET status="inputs_created", inp_file=?
