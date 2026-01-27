@@ -14,7 +14,7 @@ DB_PATH = Path.home() / "Projects/Orca_workflow/Automated/db/jobs.db"
 
 
 
-def submit_orca(inp_file, pwd, ncpus = 8, mem = 16000): #TODO: FIX THE ROUTING HERE - write in scratch but copy out of!
+def submit_orca(inp_file, job_dir, ncpus = 8, mem = 16000): #TODO: FIX THE ROUTING HERE - write in scratch but copy out of!
     inp_stem = Path(inp_file).stem
     slurm_filename = f"submit_{inp_stem}.slurm"
     sbatch_script = f"""#!/bin/bash
