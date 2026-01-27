@@ -45,7 +45,8 @@ mv *.err {job_dir}
 
 
 def main(args):
-    args.DB_PATH.parent.mkdir(exist_ok=True, parents=True)
+    Path(args.DB_PATH).parent.mkdir(exist_ok=True, parents=True)
+    
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()

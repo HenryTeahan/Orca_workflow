@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/groups/kemi/hteahan/Orca_workflow/Automated/scripts/run_job.py", line 162, in <module>
+    main(args)
+    ~~~~^^^^^^
+  File "/groups/kemi/hteahan/Orca_workflow/Automated/scripts/run_job.py", line 48, in main
+    args.DB_PATH.parent.mkdir(exist_ok=True, parents=True)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'parent'
