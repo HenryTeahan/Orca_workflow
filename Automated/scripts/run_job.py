@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS jobs (
                             UPDATE jobs
                             SET status='error_in_orca_submit', slurm_job_id=?
                             WHERE inp_file LIKE ?
-                            """, (job_id, f"%{inp_file.name}%")
+                            """, (job_id, f"%{inp_file.name}%"))
 
             
 if __name__ == "__main__":
