@@ -155,6 +155,7 @@ def parse_rejoined_mols(ligands, right_side):
     #output = [t for t in output if type(t) != int]
     smiles_output = []
     clean_mols = []
+    net_charges = []
     for i, m in enumerate(output):
         try:
             for atom in m.GetAtoms():
@@ -171,14 +172,17 @@ def parse_rejoined_mols(ligands, right_side):
 
             smiles_output.append(Chem.MolToSmiles(m))
             clean_mols.append(m)
+            net_charges.append(Chem.GetFormalCharge(m))
         except:
             smiles_output.append(-1)
             clean_mols.append(-1)
+            net_charges.append(None)
             #print("FAILED", i)
             continue
+    
     successful_smiles = [s for s in smiles_output if type(s) != int] 
     print(f"Succesfully parsed {len(successful_smiles)} mols ({len(successful_smiles)/len(ligands)*100:.2f}%)")
-    return smiles_output, clean_mols
+    return smiles_output, clean_mols, net_charges
 #smiles, mols = parse_rejoined_mols(unique_mols, central_metal)
 if __name__ == "__main__":
     # BEGIN INPUT PARSING
@@ -258,9 +262,10 @@ if __name__ == "__main__":
     for id, isomer in enumerate(args.isomer_pair):
         # Bind unique ligands to the input isomer.
         print("Isomer", isomer)
-        new_smiles, new_mols = parse_rejoined_mols(ligands, isomer)
+        new_smiles, new_mols, net_charge = parse_rejoined_mols(ligands, isomer)
         # END
         df[f'smiles_{id}'] = new_smiles
+        df[f'charge_{id}'] = net_charge
     # END
     # NOTE: smiles and ligands_smiles now contain ligand, smile pairs.
     df = df[df['smiles_0'] != "-1"]

@@ -3,14 +3,13 @@
 import argparse
 from pathlib import Path
 
-def xyz_to_inp(file, args):
+def xyz_to_inp(file, charge, multiplicity, keep_lines, query):
   with open(file, "r") as f:
     txt = f.readlines()
-    txt = txt[int(args.keep_lines):] #skipfirst two lines
+    txt = txt[int(keep_lines):] #skipfirst two lines
     txt = "".join(txt)
-    query = args.header
     # query = f"!r2scan-3c opt freq \n \n * XYZ {args.charge} {args.multiplicity} \n"
-    buffer = f"\n \n * XYZ {args.charge} {args.multiplicity} \n"
+    buffer = f"\n \n * XYZ {charge} {multiplicity} \n"
     inp = query + buffer + txt + f"\n *"
 
     xyz_path = Path(file)
@@ -50,10 +49,10 @@ def split_xyzs(filename):
             i += 1  # skip lines until we hit a natoms flag
     return name_list
 
-def xyzs_to_inp(filename):
+def xyzs_to_inp(filename, charge, multiplicity):
     name_list = split_xyzs(filename)
     for n in name_list:
-        xyz_to_inp(n, args)
+        xyz_to_inp(n, charge, multiplicity, keep_lines=2, query=f"!r2scan-3c opt freq")
         Path(n).unlink()
     return name_list
 
@@ -103,11 +102,11 @@ def main():
 
     for file in args.xyz_files:
         if file[-4:] == ".xyz":
-          xyz_to_inp(file, args)
+          xyz_to_inp(file, args.charge, args.multiplicity, args.keep_lines, args.header)
         if file[-5:] == ".xyzs":
           name_list = split_xyzs(file)
           for n in name_list:
-            xyz_to_inp(n, args)
+            xyz_to_inp(n, args.charge, args.multiplicity, args.keep_lines, args.header)
             Path(n).unlink()
 
 

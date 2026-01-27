@@ -199,7 +199,7 @@ def embed(smile, mol_ID, ligand_ID, xtb_path, outdir):
         Outdir: embedding directory - manifest.json saved here containing data.'''
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    manifest = [] # .json file to track the progress
+    #manifest = [] # .json file to track the progress
     tmp_dir = Path.cwd() / "tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     #for s_ID, smile in zip(smile_ID, smiles): #TODO: Make this into nested parallel loop.
@@ -242,17 +242,18 @@ def embed(smile, mol_ID, ligand_ID, xtb_path, outdir):
     out_path = outdir / filename
     ConformerEnsemble(coords[mask_more],atoms, energies[mask_more]).to_xyz(out_path)
 
-    manifest.append({
+    manifest = {
         "mol_ID": mol_ID,
         "ligand_ID": ligand_ID,
         "XYZ": filename,
         "xTB_energies": list(unique_E[mask_more])
-    })
+    }
 
     json_path = outdir / "conformers.json"
     with open(json_path, "w") as f:
         json.dump(manifest, f, indent=2)
-
+    shutil.rmtree(tmp_dir)
+    
     return manifest
 
 
