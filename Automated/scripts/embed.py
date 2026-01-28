@@ -193,7 +193,12 @@ def run_xTB(tmp_dir, xyz, ncpu, xtb_path):
     if (tmp_dir / out).exists():
         shutil.copy(out, Path.cwd() / out.name)
         return out
-
+def add_ni_charge(smiles, charge="+2"):
+    return re.sub(
+        r"\[Ni(?::(\d+))?\]",
+        lambda m: f"[Ni{charge}:{m.group(1)}]" if m.group(1) else f"[Ni{charge}]",
+        smiles
+    )
 def embed(smile, mol_ID, ligand_ID, xtb_path, outdir):
     '''Wrapper to run the embedding workflow - inputs: Smiles as list of rdkit.smiles; xtb_path - path to xTB. Charge and N_tries are hardcoded. 
         Outdir: embedding directory - manifest.json saved here containing data.'''
@@ -204,6 +209,7 @@ def embed(smile, mol_ID, ligand_ID, xtb_path, outdir):
     tmp_dir.mkdir(parents=True, exist_ok=True)
     #for s_ID, smile in zip(smile_ID, smiles): #TODO: Make this into nested parallel loop.
     with pushd(tmp_dir):
+        add_ni_charge(smiles)
         possible_coord_orders = get_possible_coord_permutations(smile)
         stereo_confs = []
         energies = []

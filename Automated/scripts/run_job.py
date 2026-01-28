@@ -20,7 +20,7 @@ def is_job_running(slurm_job_id):
             capture_output=True, text=True)
     print("Job check", result)
     return bool(result.stdout.strip())
-def monitor_orca_jobs(conn, cur):
+def monitor_orca_jobs(conn, cur): #TODO: MAKE THIS ERROR HANDLING WORK!!!!!
     cur.execute("""
                 SELECT job_id, inp_file, slurm_job_id
                 FROM jobs
@@ -57,7 +57,7 @@ def monitor_orca_jobs(conn, cur):
         except Exception as e:
             print("Error in parsing", e)
 
-def submit_orca(inp_file, job_dir, ncpus = 8, mem = 16000): #TODO: FIX THE ROUTING HERE - write in scratch but copy out of!
+def submit_orca(inp_file, job_dir, ncpus = 8, mem = 16000):
     inp_stem = Path(inp_file).stem
     slurm_filename = job_dir / f"submit_{inp_stem}.slurm"
     sbatch_script = f"""#!/bin/bash
@@ -173,10 +173,9 @@ CREATE TABLE IF NOT EXISTS jobs (
             inp_files = xyzs_to_inp(xyz, charge, multiplicity, ncpus = 8, mem = 16000)        
             for inp_file in inp_files:
                 cur.execute("""
-                    UPDATE jobs
-                    SET inp_file=?, status='inputs_created'
-                    WHERE xyz_file=? and ligand_id=?
-                    """, (str(inp_file), str(xyz), lig_ID))
+                    INSERT INTO jobs (ligand_id, mol_id, ligand_smiles, xyz_file, inp_file, status, job_dir)
+                    VALUES (?,?,?,?,?,?,?)
+                    """, (lig_ID, mol_ID, smile, str(xyz), str(inp_file), "inputs_created", str(outdir)))
                 conn.commit()
         except Exception as e:
             print("Error in INP File generation:", e)
