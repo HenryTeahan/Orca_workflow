@@ -1,0 +1,154 @@
+MADE DATABASE
+using square_planar as geometry template
+No submitted orca tasks yet, take a nap!!
+
+using square_planar as geometry template
+
+using square_planar as geometry template
+
+DEBUG: MOIPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: MOIPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: MOIPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+DEBUG: RMSDPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: RMSDPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: RMSDPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+DEBUG: RMSDRotCorrPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: RMSDRotCorrPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: RMSDRotCorrPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+Number of conformers within energy tolerance 1
+{'mol_ID': 0, 'ligand_ID': 0, 'XYZ': '0_0_confs.xyzs', 'xTB_energies': [np.float64(-71529.18792540744)]}
+Wrote 0_0_confsstruct_1.inp :-)
+/scratch/56635107/embed/0_0_confs.xyzs  made inps: [PosixPath('0_0_confsstruct_1.inp')]
+0_0_confsstruct_1.inp
+Submitted ORCA job 0_0_confsstruct_1.inp as Slurm ID 56635108
+using square_planar as geometry template
+Job check CompletedProcess(args=['squeue', '-j', '56635108', '-h'], returncode=0, stdout='          56635108     kemi1 0_0_conf  hteahan PD       0:00      1 (Priority)\n', stderr='')
+Job check CompletedProcess(args=['squeue', '-j', '56635108', '-h'], returncode=0, stdout='          56635108     kemi1 0_0_conf  hteahan  R       0:24      1 node067\n', stderr='')
+Job check CompletedProcess(args=['squeue', '-j', '56635108', '-h'], returncode=0, stdout='', stderr='')
+Trying to extract energy
+Looking for output
+
+using square_planar as geometry template
+
+using square_planar as geometry template
+
+DEBUG: MOIPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: MOIPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: MOIPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+DEBUG: RMSDPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: RMSDPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: RMSDPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+Number of conformers within energy tolerance 2
+{'mol_ID': 0, 'ligand_ID': 1, 'XYZ': '0_1_confs.xyzs', 'xTB_energies': [np.float64(-67261.61392786971), np.float64(-67264.5280565739)]}
+Wrote 0_1_confsstruct_1.inp :-)
+Wrote 0_1_confsstruct_2.inp :-)
+/scratch/56635107/embed/0_1_confs.xyzs  made inps: [PosixPath('0_1_confsstruct_1.inp'), PosixPath('0_1_confsstruct_2.inp')]
+0_1_confsstruct_1.inp
+Submitted ORCA job 0_1_confsstruct_1.inp as Slurm ID 56635110
+0_1_confsstruct_2.inp
+Submitted ORCA job 0_1_confsstruct_2.inp as Slurm ID 56635111
+using square_planar as geometry template
+Job check CompletedProcess(args=['squeue', '-j', '56635110', '-h'], returncode=0, stdout='          56635110     kemi1 0_1_conf  hteahan  R       0:02      1 node067\n', stderr='')
+Job check CompletedProcess(args=['squeue', '-j', '56635111', '-h'], returncode=0, stdout='          56635111     kemi1 0_1_conf  hteahan  R       0:02      1 node067\n', stderr='')
+Job check CompletedProcess(args=['squeue', '-j', '56635110', '-h'], returncode=0, stdout='          56635110     kemi1 0_1_conf  hteahan  R       0:32      1 node067\n', stderr='')
+Job check CompletedProcess(args=['squeue', '-j', '56635111', '-h'], returncode=0, stdout='          56635111     kemi1 0_1_conf  hteahan  R       0:32      1 node067\n', stderr='')
+Job check CompletedProcess(args=['squeue', '-j', '56635110', '-h'], returncode=0, stdout='', stderr='')
+Trying to extract energy
+Looking for output
+Job check CompletedProcess(args=['squeue', '-j', '56635111', '-h'], returncode=0, stdout='', stderr='')
+Trying to extract energy
+Looking for output
+No submitted orca tasks yet, take a nap!!
+No submitted orca tasks yet, take a nap!!
+No submitted orca tasks yet, take a nap!!
+
+using square_planar as geometry template
+No submitted orca tasks yet, take a nap!!
+No submitted orca tasks yet, take a nap!!
+
+using square_planar as geometry template
+
+DEBUG: MOIPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: MOIPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: MOIPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+DEBUG: RMSDPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: RMSDPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: RMSDPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+DEBUG: prune_by_rmsd_rot_corr - temporarily added edge 83-48 to the graph (will be removed before returning)
+DEBUG: RMSDRotCorrPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: RMSDRotCorrPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: RMSDRotCorrPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+Number of conformers within energy tolerance 1
+{'mol_ID': 2, 'ligand_ID': 2, 'XYZ': '2_2_confs.xyzs', 'xTB_energies': [np.float64(-91348.14009870726)]}
+Wrote 2_2_confsstruct_1.inp :-)
+/scratch/56635107/embed/2_2_confs.xyzs  made inps: [PosixPath('2_2_confsstruct_1.inp')]
+2_2_confsstruct_1.inp
+Submitted ORCA job 2_2_confsstruct_1.inp as Slurm ID 56635119
+using square_planar as geometry template
+Job check CompletedProcess(args=['squeue', '-j', '56635119', '-h'], returncode=0, stdout='          56635119     kemi1 2_2_conf  hteahan PD       0:00      1 (Priority)\n', stderr='')
+
+using square_planar as geometry template
+Job check CompletedProcess(args=['squeue', '-j', '56635119', '-h'], returncode=0, stdout='          56635119     kemi1 2_2_conf  hteahan  R       0:12      1 node067\n', stderr='')
+
+using square_planar as geometry template
+Job check CompletedProcess(args=['squeue', '-j', '56635119', '-h'], returncode=0, stdout='          56635119     kemi1 2_2_conf  hteahan  R       0:42      1 node067\n', stderr='')
+
+DEBUG: MOIPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: MOIPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: MOIPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+DEBUG: RMSDPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: RMSDPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: RMSDPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+DEBUG: RMSDRotCorrPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: RMSDRotCorrPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: RMSDRotCorrPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+Number of conformers within energy tolerance 1
+{'mol_ID': 12, 'ligand_ID': 3, 'XYZ': '12_3_confs.xyzs', 'xTB_energies': [np.float64(-82902.71497653224)]}
+Wrote 12_3_confsstruct_1.inp :-)
+/scratch/56635107/embed/12_3_confs.xyzs  made inps: [PosixPath('12_3_confsstruct_1.inp')]
+12_3_confsstruct_1.inp
+Submitted ORCA job 12_3_confsstruct_1.inp as Slurm ID 56635122
+using square_planar as geometry template
+
+using square_planar as geometry template
+
+using square_planar as geometry template
+Job check CompletedProcess(args=['squeue', '-j', '56635119', '-h'], returncode=0, stdout='', stderr='')
+Trying to extract energy
+Looking for output
+Job check CompletedProcess(args=['squeue', '-j', '56635122', '-h'], returncode=0, stdout='          56635122     kemi1 12_3_con  hteahan  R       0:04      1 node068\n', stderr='')
+
+DEBUG: MOIPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: MOIPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: MOIPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+DEBUG: RMSDPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: RMSDPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: RMSDPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+
+DEBUG: RMSDRotCorrPrunerConfig - k=1, rejected 0 (keeping 3/3), in 0.0 s
+DEBUG: RMSDRotCorrPrunerConfig - keeping 3/3 (0.0 s)
+DEBUG: RMSDRotCorrPrunerConfig - Used cached data 0/3 times, 0.00% of total calls
+Number of conformers within energy tolerance 1
+{'mol_ID': 17, 'ligand_ID': 4, 'XYZ': '17_4_confs.xyzs', 'xTB_energies': [np.float64(-71638.91448045685)]}
+Wrote 17_4_confsstruct_1.inp :-)
+/scratch/56635107/embed/17_4_confs.xyzs  made inps: [PosixPath('17_4_confsstruct_1.inp')]
+17_4_confsstruct_1.inp
+Submitted ORCA job 17_4_confsstruct_1.inp as Slurm ID 56635123
+Job check CompletedProcess(args=['squeue', '-j', '56635122', '-h'], returncode=0, stdout='          56635122     kemi1 12_3_con  hteahan  R       0:35      1 node068\n', stderr='')
+Job check CompletedProcess(args=['squeue', '-j', '56635123', '-h'], returncode=0, stdout='          56635123     kemi1 17_4_con  hteahan  R       0:02      1 node068\n', stderr='')
+Job check CompletedProcess(args=['squeue', '-j', '56635122', '-h'], returncode=0, stdout='', stderr='')
+Trying to extract energy
+Looking for output
+Job check CompletedProcess(args=['squeue', '-j', '56635123', '-h'], returncode=0, stdout='', stderr='')
+Trying to extract energy
+Looking for output
+No more jobs pending, closing ...

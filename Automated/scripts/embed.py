@@ -209,12 +209,12 @@ def embed(smile, mol_ID, ligand_ID, xtb_path, outdir):
     tmp_dir.mkdir(parents=True, exist_ok=True)
     #for s_ID, smile in zip(smile_ID, smiles): #TODO: Make this into nested parallel loop.
     with pushd(tmp_dir):
-        add_ni_charge(smiles)
+        smile = add_ni_charge(smile)
         possible_coord_orders = get_possible_coord_permutations(smile)
         stereo_confs = []
         energies = []
         for coord_order in possible_coord_orders:
-            mol, es = get_tmc_mol(smile, xtb_path, coord_order, N_tries=1, cpus = 8)
+            mol, es = get_tmc_mol(smile, xtb_path, coord_order, N_tries=15, cpus = 8)
             stereo_confs.extend(mol)
             energies.extend(es)
     all_xyz_confs = ""

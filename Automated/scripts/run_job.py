@@ -18,9 +18,10 @@ def is_job_running(slurm_job_id):
     result = subprocess.run(
             ["squeue", "-j", str(slurm_job_id), "-h"],
             capture_output=True, text=True)
-    print("Job check", result)
+    print("Job check", result, flush=True)
     return bool(result.stdout.strip())
-def monitor_orca_jobs(conn, cur): #TODO: MAKE THIS ERROR HANDLING WORK!!!!!
+
+def monitor_orca_jobs(conn, cur, job_dir): #TODO: MAKE THIS ERROR HANDLING WORK!!!!!
     cur.execute("""
                 SELECT job_id, inp_file, slurm_job_id
                 FROM jobs
@@ -28,15 +29,18 @@ def monitor_orca_jobs(conn, cur): #TODO: MAKE THIS ERROR HANDLING WORK!!!!!
                 """)
     rows = cur.fetchall()
     if not rows:
-        print("No submitted orca tasks yet, take a nap!!")
+        print("No submitted orca tasks yet, take a nap!!", flush=True)
         return
     for job_id, inp_file, slurm_job_id in rows:
         inp_path = Path(inp_file)
-        out_file = Path("Orca_run") / inp_path.name.replace(".inp", ".out")
-        err_file = Path("Orca_run") / inp_path.name.replace(".inp", ".err")
+        out_file = job_dir / inp_path.name.replace(".inp",".out")
+        err_file = job_dir / inp_path.name.replace(".inp",".err")
+
         if is_job_running(slurm_job_id):
             continue
-    
+        if not out_file.exists():
+            print(f"waiting for {out_file}", flush=True)
+            continue
         if err_file.exists() and err_file.stat().st_size > 0:
             print(f"Orca failed :-( {inp_file}")
             cur.execute("""
@@ -47,14 +51,22 @@ def monitor_orca_jobs(conn, cur): #TODO: MAKE THIS ERROR HANDLING WORK!!!!!
             conn.commit()
             continue
         try: #If no error and job complete
+            print("Trying to extract energy", flush=True)
             df = extract_energy(out_file)
-            gibbs_free = df['Final Gibbs free energy']
+            gibbs_free = df['Final Gibbs free energy'].iloc[0]
             cur.execute("""
                         UPDATE jobs
-                        SET best_energy = ?
+                        SET best_energy = ?, status="orca_completed"
                         WHERE inp_file = ?
                         """, (gibbs_free, inp_file))
+            conn.commit()
         except Exception as e:
+            cur.execute("""
+                        UPDATE jobs
+                        SET status="orca_read_failed"
+                        WHERE inp_file = ?
+                        """, (inp_file,))
+            conn.commit()
             print("Error in parsing", e)
 
 def submit_orca(inp_file, job_dir, ncpus = 8, mem = 16000):
@@ -66,8 +78,8 @@ def submit_orca(inp_file, job_dir, ncpus = 8, mem = 16000):
 #SBATCH --ntasks={ncpus}
 #SBATCH --mem {mem}
 #SBATCH --time=02:00:00
-#SBATCH --output={job_dir}/{inp_file}.out
-#SBATCH --error={job_dir}/{inp_file}.err
+#SBATCH --output={job_dir}/{inp_file.name.replace(".inp", ".out")}
+#SBATCH --error={job_dir}/{inp_file.name.replace(".inp", ".out")}
 #SBATCH --partition=kemi1
 #Move to scratch dir for calculations
 module load mpi/openmpi-x86_64
@@ -88,11 +100,23 @@ mv *.err {job_dir}
     job_id = result.stdout.strip().split()[-1]
     return job_id # Track slurm task by id
 
-def monitoring_thread(DB_PATH, poll_interval=30):
+def monitoring_thread(DB_PATH, job_dir, poll_interval=30):
     thread_conn = sqlite3.connect(DB_PATH)
+    thread_conn.execute("PRAGMA journal_mode=WAL;")
+    thread_conn.execute("PRAGMA synchronous=NORMAL;")
     thread_cur = thread_conn.cursor()
     while True:
-        monitor_orca_jobs(thread_conn, thread_cur)  # the function from before
+        thread_cur.execute("""
+        SELECT COUNT(*) 
+        FROM jobs
+        WHERE (inp_file IS NULL AND status='awakening')
+        OR (inp_file IS NOT NULL AND status IN ('inputs_created','orca_submitted'))
+        """)
+        pending = thread_cur.fetchone()[0]
+        if pending == 0:
+            print("No more jobs pending, closing ...", flush=True)
+            break
+        monitor_orca_jobs(thread_conn, thread_cur, job_dir)  # the function from before
         time.sleep(poll_interval)
 
 
@@ -103,6 +127,8 @@ def main(args):
     
 
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;") # NOTE: Allows for writing from both monitoring thread & main concurrently using Wriet-Ahead-Logging
     cur = conn.cursor()
     
     cur.execute("""
@@ -125,14 +151,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     conn.commit()
     ### END
 
-    print("MADE DATABASE") 
-    t = threading.Thread(target=monitoring_thread, args=(DB_PATH,))
-    t.daemon = False
-    t.start()
-
+    print("MADE DATABASE", flush=True) 
+    
     outdir = Path(Path.cwd() / "Orca_run")
     outdir.mkdir(parents=True, exist_ok=True)
-
+    
     scratch = Path(args.SCRATCH_DIR)
     scratch.mkdir(parents=True, exist_ok=True)
     
@@ -147,18 +170,30 @@ CREATE TABLE IF NOT EXISTS jobs (
     mol_ID = smiles_df[args.ID_COL] # THis is index column
     ligand_ID = smiles_df.index.to_list()
     xtb_path = args.xTB_path
-    
+    # INITIALIZE THE DB
+    for smile, charge, m_ID, l_ID in zip(smiles, charges, mol_ID, ligand_ID): #TODO: Parallelize
+        cur.execute("""
+        INSERT INTO jobs (ligand_id, mol_id, ligand_smiles, xyz_file, inp_file, status, job_dir)
+        VALUES (?, ?, ?, ?, NULL, 'awakening', ?)
+        """, (l_ID, m_ID, smile, f"{m_ID}_{l_ID}_confs.xyzs", str(outdir)))
+    conn.commit()
+    t = threading.Thread(target=monitoring_thread, args=(DB_PATH,outdir))
+    t.daemon = False
+    t.start()
+
+
+
     for smile, charge, mol_ID, lig_ID in zip(smiles, charges, mol_ID, ligand_ID): #TODO: Parallelize
         try:
             conformers = embed(smile, mol_ID, lig_ID, xtb_path, embed_dir)
             print(conformers) 
             cur.execute("""
-                        INSERT INTO jobs
-                        (ligand_id, mol_id, ligand_smiles, xyz_file, xtb_energy, status, job_dir)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (conformers["ligand_ID"], conformers['mol_ID'], smile, conformers["XYZ"], json.dumps(conformers["xTB_energies"]), "complete", str(embed_dir)))
+                        UPDATE jobs
+                        SET xtb_energy=?, status='complete'
+                        where ligand_id=? AND xyz_file=? AND status='awakening'
+                        """, (json.dumps(conformers['xTB_energies']), lig_ID, conformers["XYZ"]))
             conn.commit()
-        except Exception as e:
+        except Exception as e: #TODO: UPDATE THIS LIKE ABOVE
             print("Error in embedding:", e)
             cur.execute("""
             INSERT INTO jobs
@@ -184,7 +219,7 @@ CREATE TABLE IF NOT EXISTS jobs (
             SET status='input_gen_failed'
             WHERE xyz_file=? and ligand_id=?
             """, (str(xyz), lig_ID))
-
+            conn.commit()
         for inp_file in inp_files:
             inp_path = Path(inp_file)
             print(inp_path)
